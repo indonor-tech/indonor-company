@@ -116,14 +116,8 @@ async function nextDisplayOrder() {
 
 function linkedEmployee(member) {
   const value = member?.employeeId;
-  if (!value || typeof value !== 'object' || value.employmentStatus === undefined) return null;
+  if (!value || typeof value !== 'object') return null;
   return value;
-}
-
-function isActiveLinkedEmployee(member) {
-  const employee = linkedEmployee(member);
-  if (!member?.employeeId) return true;
-  return Boolean(employee) && !employee.isDeleted && employee.employmentStatus === 'ACTIVE';
 }
 
 function isPublicPhotoUrl(url) {
@@ -138,7 +132,7 @@ function employeeIdFromPhotoUrl(url) {
 
 function memberPhotoUrl(member) {
   if (isPublicPhotoUrl(member.photoUrl)) return member.photoUrl;
-  const employee = linkedEmployee(member);
+  const employee = member?.employeeId && typeof member.employeeId === 'object' ? member.employeeId : null;
   if (employee?.profilePhotoUrl || employeePhotoPath.test(member.photoUrl || '')) {
     return `${String(env.activeAppUrl).replace(/\/$/, '')}/api/v1/website-team/member-photos/${member._id}`;
   }
@@ -180,25 +174,12 @@ router.get('/public', asyncHandler(async (_req, res) => {
   if (mongoose.connection.readyState !== 1) {
     return sendSuccess(res, [], 'Team fetched');
   }
-  const members = await WebsiteTeamMember.find({ isDeleted: false, isPublished: true })
+  const members = await WebsiteTeamMember.find({ isDeleted: false })
     .select(publicFields)
-    .populate('employeeId', 'employmentStatus isDeleted profilePhotoUrl')
+    .populate('employeeId', 'profilePhotoUrl')
     .sort({ displayOrder: 1, createdAt: 1 })
     .lean();
-  const photoEmployeeIds = [...new Set(members.map((member) => employeeIdFromPhotoUrl(member.photoUrl)).filter(Boolean))];
-  const activePhotoOwners = new Set(
-    (await Employee.find({ _id: { $in: photoEmployeeIds }, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id').lean())
-      .map((employee) => String(employee._id))
-  );
-  const visible = members
-    .filter((member) => {
-      if (!isActiveLinkedEmployee(member)) return false;
-      const photoEmployeeId = employeeIdFromPhotoUrl(member.photoUrl);
-      if (photoEmployeeId && !linkedEmployee(member) && !activePhotoOwners.has(photoEmployeeId)) return false;
-      return true;
-    })
-    .map(publicMember);
-  return sendSuccess(res, visible, 'Team fetched');
+  return sendSuccess(res, members.map(publicMember), 'Team fetched');
 }));
 
 router.get('/employee-photos/:id', asyncHandler(async (req, res) => {
@@ -221,17 +202,11 @@ router.get('/photos/:filename', asyncHandler(async (req, res) => {
 
 router.get('/member-photos/:id', asyncHandler(async (req, res) => {
   if (objectId.validate(req.params.id).error) throw new AppError('Photo not found', 404);
-  const member = await WebsiteTeamMember.findOne({ _id: req.params.id, isDeleted: false, isPublished: true })
-    .populate('employeeId', 'employmentStatus isDeleted');
-  if (!member || !isActiveLinkedEmployee(member)) {
-    throw new AppError('Photo not found', 404);
-  }
-  const employeeId = linkedEmployee(member)?._id || employeeIdFromPhotoUrl(member.photoUrl);
+  const member = await WebsiteTeamMember.findOne({ _id: req.params.id, isDeleted: false })
+    .populate('employeeId', 'profilePhotoUrl');
+  if (!member) throw new AppError('Photo not found', 404);
+  const employeeId = linkedEmployee(member)?._id || member.employeeId?._id || member.employeeId || employeeIdFromPhotoUrl(member.photoUrl);
   if (!employeeId) throw new AppError('Photo not found', 404);
-  if (!linkedEmployee(member)) {
-    const employee = await Employee.findOne({ _id: employeeId, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id');
-    if (!employee) throw new AppError('Photo not found', 404);
-  }
   const photo = await findProfilePhoto('Employee', employeeId);
   return sendProfilePhoto(res, photo, { cacheControl: 'public, max-age=300' });
 }));
