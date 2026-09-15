@@ -1,0 +1,3 @@
+# Place client demo recordings here, e.g. ops-demo.mp4
+# Then reference them in app/lib/projects.ts as:
+# video: { type: "file", src: "/videos/ops-demo.mp4" }

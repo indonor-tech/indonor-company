@@ -1,0 +1,14 @@
+just for cicd test
+update ip address
+update in main.yml
+upload new .pem key correctly
+update path directry
+add some path
+add some code
+change all main.yml
+Hello
+Fix almost all bugs
+git clone
+change user name
+update something
+instal npm

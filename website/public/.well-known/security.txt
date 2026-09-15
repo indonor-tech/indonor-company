@@ -1,0 +1,4 @@
+Contact: mailto:kaiynat.ashraf8@gmail.com
+Preferred-Languages: en
+Canonical: https://indonortech.com/.well-known/security.txt
+Expires: 2027-12-31T23:59:59.000Z

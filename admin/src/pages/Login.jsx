@@ -1,0 +1,24 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Alert, Box, Button, Card, CardContent, Checkbox, FormControlLabel, IconButton, InputAdornment, Link, Stack, TextField, Typography } from '@mui/material';
+import { ArrowForward, Visibility, VisibilityOff } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+
+export default function Login() {
+  const { login } = useAuth(); const navigate = useNavigate(); const [form, setForm] = useState({ email: '', password: '' }); const [error, setError] = useState(''); const [loading, setLoading] = useState(false); const [showPassword, setShowPassword] = useState(false);
+  const submit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await login(form);
+      navigate('/', { replace: true });
+    } catch (requestError) {
+      const networkFailure = !requestError.response && (requestError.code === 'ERR_NETWORK' || requestError.message === 'Network Error');
+      setError(requestError.response?.data?.message || (networkFailure ? 'Cannot reach the API. Confirm the backend is running.' : 'Unable to sign in.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+  return <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: '#f4f6f8', p: { xs: 0, md: 3 } }}><Card sx={{ width: '100%', maxWidth: 1440, minHeight: { xs: '100vh', md: 'calc(100vh - 48px)' }, mx: 'auto', display: 'flex', overflow: 'hidden', border: 0, boxShadow: { xs: 'none', md: '0 24px 60px rgba(16, 24, 40, .08)' } }}><Box sx={{ display: { xs: 'none', lg: 'flex' }, width: '51%', position: 'relative', overflow: 'hidden', bgcolor: '#e9f8f5', alignItems: 'center', justifyContent: 'center', p: 8 }}><Box sx={{ position: 'absolute', width: 480, height: 480, borderRadius: '50%', bgcolor: '#c8f0e8', top: -180, right: -130 }} /><Box sx={{ position: 'absolute', width: 360, height: 360, borderRadius: '50%', border: '42px solid #d7f4ee', bottom: -130, left: -100 }} /><Stack spacing={3} sx={{ position: 'relative', maxWidth: 500 }}><Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: 'primary.main', color: 'white', display: 'grid', placeItems: 'center', fontSize: 26, fontWeight: 800 }}>I</Box><Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1 }}>People are your greatest asset.</Typography><Typography color="text.secondary" fontSize={17} lineHeight={1.7}>A clear, calm workspace for your HR team to manage people, hiring and growth.</Typography><Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', pt: 2 }}><Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: 'primary.main' }} /><Typography variant="body2" color="text.secondary">Secure operations · Built for teams</Typography></Box></Stack></Box><Box sx={{ flex: 1, display: 'grid', placeItems: 'center', p: { xs: 3, sm: 8 } }}><Stack spacing={3.2} component="form" onSubmit={submit} sx={{ width: '100%', maxWidth: 440 }}><Box sx={{ display: { xs: 'flex', lg: 'none' }, alignItems: 'center', gap: 1.2, mb: 2 }}><Box sx={{ width: 40, height: 40, borderRadius: 1.5, bgcolor: 'primary.main', color: 'white', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 21 }}>I</Box><Typography fontWeight={800} letterSpacing=".04em">INDONOR</Typography></Box><Box><Typography variant="h4">Welcome back</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>Sign in to your HR operations workspace.</Typography></Box>{error && <Alert severity="error">{error}</Alert>}<Stack spacing={2.3}><TextField label="Work email" type="email" required fullWidth disabled={loading} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /><TextField label="Password" type={showPassword ? 'text' : 'password'} required fullWidth disabled={loading} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} InputProps={{ endAdornment: <InputAdornment position="end"><IconButton aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)} edge="end" disabled={loading}>{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment> }} /></Stack><Stack direction="row" justifyContent="space-between" alignItems="center"><FormControlLabel control={<Checkbox size="small" disabled={loading} />} label={<Typography variant="body2">Remember me</Typography>} /><Link component="button" type="button" underline="hover" variant="body2">Forgot password?</Link></Stack><Button size="large" variant="contained" type="submit" loading={loading} loadingPosition="end" endIcon={<ArrowForward />}>{loading ? 'Signing in…' : 'Sign in'}</Button><Typography variant="caption" color="text.secondary" textAlign="center">Access is controlled by your assigned role and permissions.</Typography></Stack></Box></Card></Box>;
+}

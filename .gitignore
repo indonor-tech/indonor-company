@@ -1,0 +1,9 @@
+node_modules/
+dist/
+private-files/
+public-files/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
