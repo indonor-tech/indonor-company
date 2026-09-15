@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 const allowed = new Map([
   ["website-team/photos", /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif)$/i],
   ["website-team/member-photos", /^[a-f0-9]{24}$/i],
+  ["website-team/employee-photos", /^[a-f0-9]{24}$/i],
   ["website-projects/media", /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif|mp4|webm|mov)$/i]
 ]);
 

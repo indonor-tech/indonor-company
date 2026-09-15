@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { User } from "lucide-react";
 
 export type TeamMember = {
   id: string;
@@ -51,10 +52,7 @@ export default function TeamGrid() {
         if (!response.ok || result.success === false) {
           throw new Error(result.message || "Could not load the team.");
         }
-        if (!cancelled) {
-          const next = (Array.isArray(result.data) ? result.data : []).filter((member: TeamMember) => Boolean(member.photoUrl));
-          setMembers(next);
-        }
+        if (!cancelled) setMembers(Array.isArray(result.data) ? result.data : []);
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the team.");
       } finally {
@@ -81,7 +79,7 @@ export default function TeamGrid() {
   if (!members.length) {
     return (
       <p className="mx-auto max-w-xl text-center text-muted-foreground">
-        Team profiles will appear here once they are published from the Indonor admin.
+        Team profiles will appear here once active employees are added in the Indonor admin.
       </p>
     );
   }
@@ -101,8 +99,9 @@ export default function TeamGrid() {
                 onError={() => setFailedPhotos((current) => ({ ...current, [member.id]: true }))}
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-4xl font-semibold text-muted-foreground">
-                {member.name.slice(0, 1)}
+              <div className="flex h-full items-center justify-center bg-muted">
+                <User className="h-24 w-24 text-muted-foreground" strokeWidth={1.25} aria-hidden="true" />
+                <span className="sr-only">{member.name} profile photo unavailable</span>
               </div>
             )}
           </div>
