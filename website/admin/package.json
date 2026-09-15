@@ -1,0 +1,8 @@
+{
+  "name": "indonor-website-vercel-build",
+  "private": true,
+  "description": "Vercel root directory is website, but the project build command still runs cd admin. This package forwards that command to the Next.js app.",
+  "scripts": {
+    "build": "npm run build --prefix .."
+  }
+}
