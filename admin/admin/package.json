@@ -1,0 +1,8 @@
+{
+  "name": "indonor-admin-vercel-build",
+  "private": true,
+  "description": "Vercel root directory is admin, but the project build command still runs cd admin. This package forwards that command to the Vite app.",
+  "scripts": {
+    "build": "npm run build --prefix .."
+  }
+}

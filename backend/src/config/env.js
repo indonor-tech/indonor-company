@@ -1,6 +1,14 @@
 import 'dotenv/config';
 
 const nodeEnv = process.env.NODE_ENV || 'development';
+
+if (!process.env.SERVER_APP_URL && process.env.RENDER_EXTERNAL_URL) {
+  process.env.SERVER_APP_URL = process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '');
+}
+if (!process.env.SERVER_ADMIN_URL) {
+  process.env.SERVER_ADMIN_URL = 'https://indonor-tech.vercel.app';
+}
+
 const required = ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
 if (nodeEnv !== 'development' && nodeEnv !== 'test') {
   required.push('SERVER_APP_URL', 'SERVER_ADMIN_URL');
