@@ -24,7 +24,7 @@ const serverAdminUrl = process.env.SERVER_ADMIN_URL || '';
 const activeAppUrl = nodeEnv === 'development' ? localAppUrl : serverAppUrl;
 const activeAdminUrl = nodeEnv === 'development' ? localAdminUrl : serverAdminUrl;
 if (nodeEnv !== 'development' && nodeEnv !== 'test' && process.env.MONGODB_TLS_ALLOW_INVALID_CERTS === 'true') {
-  throw new Error('MONGODB_TLS_ALLOW_INVALID_CERTS must be false outside development');
+  console.warn('Ignoring MONGODB_TLS_ALLOW_INVALID_CERTS in production; TLS certificate validation stays enabled.');
 }
 
 function originOf(value) {
@@ -78,7 +78,7 @@ export const env = {
   corsAllowedOrigins,
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/indonor_hr',
   mongoDnsServers: (process.env.MONGODB_DNS_SERVERS || '').split(',').map((server) => server.trim()).filter(Boolean),
-  mongoTlsAllowInvalidCertificates: process.env.MONGODB_TLS_ALLOW_INVALID_CERTS === 'true',
+  mongoTlsAllowInvalidCertificates: (nodeEnv === 'development' || nodeEnv === 'test') && process.env.MONGODB_TLS_ALLOW_INVALID_CERTS === 'true',
   accessSecret: process.env.JWT_ACCESS_SECRET || 'development-access-secret',
   refreshSecret: process.env.JWT_REFRESH_SECRET || 'development-refresh-secret',
   accessExpiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '1h',
