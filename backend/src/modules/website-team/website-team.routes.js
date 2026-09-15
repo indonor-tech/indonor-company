@@ -55,7 +55,10 @@ function employeeName(employee) {
 }
 
 function employeeRole(employee) {
-  return employee.designation?.name || employee.department?.name || String(employee.employeeType || '').replaceAll('_', ' ') || 'Team member';
+  const type = String(employee.employeeType || '').replaceAll('_', ' ');
+  const spec = String(employee.specialization || '').trim();
+  if (type && spec) return `${type} - ${spec}`;
+  return employee.designation?.name || employee.department?.name || type || 'Team member';
 }
 
 function cleanRoles(roles, role) {
@@ -173,30 +176,42 @@ async function copyEmployeePhotoToPublic(employee) {
   }
 }
 
+function publicEmployee(employee, displayOrder) {
+  const mapped = selectableEmployee(employee);
+  const roles = cleanRoles([], mapped.role);
+  const origin = String(env.activeAppUrl).replace(/\/$/, '');
+  return {
+    id: String(employee._id),
+    name: mapped.name,
+    role: roles.join(' · ') || 'Team member',
+    roles: roles.length ? roles : ['Team member'],
+    bio: '',
+    photoUrl: employee.profilePhotoUrl ? `${origin}/api/v1/website-team/employee-photos/${employee._id}` : '',
+    location: mapped.location,
+    linkedinUrl: '',
+    displayOrder
+  };
+}
+
 router.get('/public', asyncHandler(async (_req, res) => {
   if (mongoose.connection.readyState !== 1) {
     return sendSuccess(res, [], 'Team fetched');
   }
-  const members = await WebsiteTeamMember.find({ isDeleted: false, isPublished: true })
-    .select(publicFields)
-    .populate('employeeId', 'employmentStatus isDeleted profilePhotoUrl')
-    .sort({ displayOrder: 1, createdAt: 1 })
+  const employees = await Employee.find({ isDeleted: false, employmentStatus: 'ACTIVE' })
+    .populate('department designation', 'name')
+    .select('firstName middleName lastName profilePhotoUrl workLocation city country employeeType specialization')
+    .sort({ createdAt: -1 })
+    .limit(200)
     .lean();
-  const photoEmployeeIds = [...new Set(members.map((member) => employeeIdFromPhotoUrl(member.photoUrl)).filter(Boolean))];
-  const activePhotoOwners = new Set(
-    (await Employee.find({ _id: { $in: photoEmployeeIds }, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id').lean())
-      .map((employee) => String(employee._id))
-  );
-  const visible = members
-    .filter((member) => {
-      if (!isActiveLinkedEmployee(member)) return false;
-      const photoEmployeeId = employeeIdFromPhotoUrl(member.photoUrl);
-      if (photoEmployeeId && !linkedEmployee(member) && !activePhotoOwners.has(photoEmployeeId)) return false;
-      return true;
-    })
-    .map(publicMember)
-    .filter((member) => member.photoUrl);
-  return sendSuccess(res, visible, 'Team fetched');
+  return sendSuccess(res, employees.map((employee, index) => publicEmployee(employee, index)), 'Team fetched');
+}));
+
+router.get('/employee-photos/:id', asyncHandler(async (req, res) => {
+  if (objectId.validate(req.params.id).error) throw new AppError('Photo not found', 404);
+  const employee = await Employee.findOne({ _id: req.params.id, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id');
+  if (!employee) throw new AppError('Photo not found', 404);
+  const photo = await findProfilePhoto('Employee', employee._id);
+  return sendProfilePhoto(res, photo, { cacheControl: 'public, max-age=300' });
 }));
 
 router.get('/photos/:filename', asyncHandler(async (req, res) => {
@@ -241,7 +256,7 @@ router.get('/employees', asyncHandler(async (_req, res) => {
     _id: { $nin: linked }
   })
     .populate('department designation', 'name')
-    .select('firstName middleName lastName profilePhotoUrl companyEmail personalEmail workLocation city country employeeType')
+    .select('firstName middleName lastName profilePhotoUrl companyEmail personalEmail workLocation city country employeeType specialization')
     .sort({ firstName: 1, lastName: 1 })
     .limit(200)
     .lean();
