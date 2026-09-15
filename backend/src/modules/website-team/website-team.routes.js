@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
 import Joi from 'joi';
+import mongoose from 'mongoose';
 import WebsiteTeamMember from './website-team.model.js';
 import Employee from '../employees/employee.model.js';
 import { authenticate, authorize } from '../../middleware/auth.js';
@@ -12,11 +13,13 @@ import { AppError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 import { env } from '../../config/env.js';
 import { publicTeamPhotoDir, storePublicImage } from '../../services/fileStorage.service.js';
+import { findProfilePhoto, profilePhotoFilePath, sendProfilePhoto } from '../common/profilePhoto.js';
 
 const router = express.Router();
 const objectId = Joi.string().hex().length(24);
-const publicFields = 'name role roles bio photoUrl location linkedinUrl displayOrder';
-const currentEmployeeStatuses = ['ACTIVE', 'ON_PROBATION', 'ON_LEAVE'];
+const publicFields = 'name role roles bio photoUrl location linkedinUrl displayOrder employeeId';
+const currentEmployeeStatuses = ['ACTIVE'];
+const employeePhotoPath = /\/api\/v1\/employees\/[a-f0-9]{24}\/photo/i;
 const photoName = /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif)$/i;
 const memberInput = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
@@ -108,6 +111,37 @@ async function nextDisplayOrder() {
   return (highest?.displayOrder ?? -1) + 1;
 }
 
+function linkedEmployee(member) {
+  const value = member?.employeeId;
+  if (!value || typeof value !== 'object' || value.employmentStatus === undefined) return null;
+  return value;
+}
+
+function isActiveLinkedEmployee(member) {
+  const employee = linkedEmployee(member);
+  if (!member?.employeeId) return true;
+  return Boolean(employee) && !employee.isDeleted && employee.employmentStatus === 'ACTIVE';
+}
+
+function isPublicPhotoUrl(url) {
+  const value = String(url || '').trim();
+  if (!value || employeePhotoPath.test(value)) return false;
+  return /^https?:\/\//i.test(value) || value.includes('/website-team/photos/');
+}
+
+function employeeIdFromPhotoUrl(url) {
+  return String(url || '').match(/\/employees\/([a-f0-9]{24})\/photo/i)?.[1] || '';
+}
+
+function memberPhotoUrl(member) {
+  if (isPublicPhotoUrl(member.photoUrl)) return member.photoUrl;
+  const employee = linkedEmployee(member);
+  if (employee?.profilePhotoUrl || employeePhotoPath.test(member.photoUrl || '')) {
+    return `${String(env.activeAppUrl).replace(/\/$/, '')}/api/v1/website-team/member-photos/${member._id}`;
+  }
+  return '';
+}
+
 function publicMember(member) {
   const roles = cleanRoles(member.roles, member.role);
   return {
@@ -116,19 +150,53 @@ function publicMember(member) {
     role: roles.join(' · '),
     roles,
     bio: member.bio || '',
-    photoUrl: member.photoUrl || '',
+    photoUrl: memberPhotoUrl(member),
     location: member.location || '',
     linkedinUrl: member.linkedinUrl || '',
     displayOrder: member.displayOrder ?? 0
   };
 }
 
+async function copyEmployeePhotoToPublic(employee) {
+  const filePath = await profilePhotoFilePath('Employee', employee._id);
+  if (!filePath) return '';
+  try {
+    const buffer = await fs.readFile(filePath);
+    const stored = await storePublicImage({
+      originalname: path.basename(filePath) || 'photo.jpg',
+      buffer,
+      mimetype: 'image/jpeg'
+    }, env.activeAppUrl);
+    return stored.photoUrl || '';
+  } catch {
+    return '';
+  }
+}
+
 router.get('/public', asyncHandler(async (_req, res) => {
+  if (mongoose.connection.readyState !== 1) {
+    return sendSuccess(res, [], 'Team fetched');
+  }
   const members = await WebsiteTeamMember.find({ isDeleted: false, isPublished: true })
     .select(publicFields)
+    .populate('employeeId', 'employmentStatus isDeleted profilePhotoUrl')
     .sort({ displayOrder: 1, createdAt: 1 })
     .lean();
-  return sendSuccess(res, members.map(publicMember), 'Team fetched');
+  const photoEmployeeIds = [...new Set(members.map((member) => employeeIdFromPhotoUrl(member.photoUrl)).filter(Boolean))];
+  const activePhotoOwners = new Set(
+    (await Employee.find({ _id: { $in: photoEmployeeIds }, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id').lean())
+      .map((employee) => String(employee._id))
+  );
+  const visible = members
+    .filter((member) => {
+      if (!isActiveLinkedEmployee(member)) return false;
+      const photoEmployeeId = employeeIdFromPhotoUrl(member.photoUrl);
+      if (photoEmployeeId && !linkedEmployee(member) && !activePhotoOwners.has(photoEmployeeId)) return false;
+      return true;
+    })
+    .map(publicMember)
+    .filter((member) => member.photoUrl);
+  return sendSuccess(res, visible, 'Team fetched');
 }));
 
 router.get('/photos/:filename', asyncHandler(async (req, res) => {
@@ -139,6 +207,23 @@ router.get('/photos/:filename', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.type(path.extname(filename));
   return res.sendFile(filePath);
+}));
+
+router.get('/member-photos/:id', asyncHandler(async (req, res) => {
+  if (objectId.validate(req.params.id).error) throw new AppError('Photo not found', 404);
+  const member = await WebsiteTeamMember.findOne({ _id: req.params.id, isDeleted: false, isPublished: true })
+    .populate('employeeId', 'employmentStatus isDeleted');
+  if (!member || !isActiveLinkedEmployee(member)) {
+    throw new AppError('Photo not found', 404);
+  }
+  const employeeId = linkedEmployee(member)?._id || employeeIdFromPhotoUrl(member.photoUrl);
+  if (!employeeId) throw new AppError('Photo not found', 404);
+  if (!linkedEmployee(member)) {
+    const employee = await Employee.findOne({ _id: employeeId, isDeleted: false, employmentStatus: 'ACTIVE' }).select('_id');
+    if (!employee) throw new AppError('Photo not found', 404);
+  }
+  const photo = await findProfilePhoto('Employee', employeeId);
+  return sendProfilePhoto(res, photo, { cacheControl: 'public, max-age=300' });
 }));
 
 router.use(authenticate, authorize('website:read', 'catalog:read'));
@@ -189,7 +274,13 @@ router.post('/from-employees', authorize('website:write', 'catalog:create'), val
   const toAdd = employees.filter((employee) => !linked.has(String(employee._id)));
   if (!toAdd.length) throw new AppError('Those employees are already on the website team, or are not current staff.', 409);
   let displayOrder = await nextDisplayOrder();
-  const members = await WebsiteTeamMember.insertMany(toAdd.map((employee) => memberFromEmployee(employee, displayOrder++)));
+  const payloads = [];
+  for (const employee of toAdd) {
+    const payload = memberFromEmployee(employee, displayOrder++);
+    payload.photoUrl = await copyEmployeePhotoToPublic(employee);
+    payloads.push(payload);
+  }
+  const members = await WebsiteTeamMember.insertMany(payloads);
   return sendSuccess(res, members, toAdd.length === 1 ? 'Employee added to the website team' : 'Employees added to the website team');
 }));
 

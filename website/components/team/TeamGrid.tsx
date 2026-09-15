@@ -38,6 +38,7 @@ function TeamSkeleton() {
 
 export default function TeamGrid() {
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [failedPhotos, setFailedPhotos] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -50,7 +51,10 @@ export default function TeamGrid() {
         if (!response.ok || result.success === false) {
           throw new Error(result.message || "Could not load the team.");
         }
-        if (!cancelled) setMembers(Array.isArray(result.data) ? result.data : []);
+        if (!cancelled) {
+          const next = (Array.isArray(result.data) ? result.data : []).filter((member: TeamMember) => Boolean(member.photoUrl));
+          setMembers(next);
+        }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the team.");
       } finally {
@@ -87,10 +91,15 @@ export default function TeamGrid() {
       {members.map((member) => (
         <article key={member.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="relative aspect-[4/5] bg-muted">
-            {member.photoUrl ? (
+            {member.photoUrl && !failedPhotos[member.id] ? (
               // Dynamic CMS URLs can come from any host.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={member.photoUrl} alt={member.name} className="h-full w-full object-cover" />
+              <img
+                src={member.photoUrl}
+                alt={member.name}
+                className="h-full w-full object-cover"
+                onError={() => setFailedPhotos((current) => ({ ...current, [member.id]: true }))}
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-4xl font-semibold text-muted-foreground">
                 {member.name.slice(0, 1)}

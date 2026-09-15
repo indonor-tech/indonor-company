@@ -21,20 +21,21 @@ export function findProfilePhoto(ownerType, ownerId) {
   return Document.findOne({ ownerType, ownerId, type: 'PHOTO', isDeleted: false }).sort({ createdAt: -1 });
 }
 
-export async function sendProfilePhoto(res, photo) {
+export async function sendProfilePhoto(res, photo, options = {}) {
   if (!photo) throw new AppError('Profile photo not found', 404);
   if (photo.externalUrl) return res.redirect(302, photo.externalUrl);
   if (!photo.storageKey) throw new AppError('Profile photo not found', 404);
   const mime = photo.mimeType || 'image/jpeg';
+  const cacheControl = options.cacheControl || 'private, max-age=60';
   if (photo.storageProvider === 'cloudinary') {
     const buffer = await readPrivateFileBuffer(photo);
-    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.setHeader('Cache-Control', cacheControl);
     res.type(mime);
     return res.send(buffer);
   }
   const file = await getPrivateFileUrl(photo);
   try { await fs.access(file); } catch { throw new AppError('Profile photo not found', 404); }
-  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.setHeader('Cache-Control', cacheControl);
   res.type(mime);
   return res.sendFile(file);
 }
