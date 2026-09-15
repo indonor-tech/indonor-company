@@ -67,6 +67,17 @@ test('missing website team photos are public 404s', async () => {
   assert.equal(response.statusCode, 404);
 });
 
+test('public website team does not require authentication', async () => {
+  const response = await request(app).get('/api/v1/website-team/public');
+  assert.notEqual(response.statusCode, 401);
+  assert.equal(Array.isArray(response.body.data), true);
+});
+
+test('invalid website team member photo ids are public 404s', async () => {
+  const response = await request(app).get('/api/v1/website-team/member-photos/not-a-photo');
+  assert.equal(response.statusCode, 404);
+});
+
 test('admin website projects list requires authentication', async () => {
   const response = await request(app).get('/api/v1/website-projects');
   assert.equal(response.statusCode, 401);

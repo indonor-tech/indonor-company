@@ -26,7 +26,7 @@ export function crmApiCandidates() {
   return [...new Set([primary, LOCAL_CRM_API].filter(Boolean))];
 }
 
-const crmMediaPath = /^\/api\/v1\/(website-team\/photos|website-projects\/media)\/([^/?#]+)$/;
+const crmMediaPath = /^\/api\/v1\/(website-team\/photos|website-team\/member-photos|website-projects\/media)\/([^/?#]+)$/;
 
 export function toSiteAssetUrl(url?: string | null) {
   const trimmed = String(url || "").trim();

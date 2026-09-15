@@ -11,7 +11,9 @@ export async function GET() {
       const result = await response.json().catch(() => ({ success: false, data: [] }));
       if (response.ok) {
         const data = Array.isArray(result.data)
-          ? result.data.map((member: { photoUrl?: string }) => ({ ...member, photoUrl: toSiteAssetUrl(member.photoUrl) }))
+          ? result.data
+            .map((member: { photoUrl?: string }) => ({ ...member, photoUrl: toSiteAssetUrl(member.photoUrl) }))
+            .filter((member: { photoUrl?: string }) => Boolean(member.photoUrl))
           : [];
         return NextResponse.json({ ...result, data });
       }
