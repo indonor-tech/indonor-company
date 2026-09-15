@@ -70,6 +70,8 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   poweredByHeader: false,
   compress: true,
+  // Vercel still has Output Directory set to admin/dist from the old Vite app.
+  distDir: process.env.VERCEL ? "admin/dist" : ".next",
   experimental: {
     turbopackUseSystemTlsCerts: true,
   },
