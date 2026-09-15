@@ -79,7 +79,7 @@ export default function TeamGrid() {
   if (!members.length) {
     return (
       <p className="mx-auto max-w-xl text-center text-muted-foreground">
-        Team profiles will appear here once active employees are added in the Indonor admin.
+        Team profiles will appear here once they are published from Website team in the Indonor admin.
       </p>
     );
   }
