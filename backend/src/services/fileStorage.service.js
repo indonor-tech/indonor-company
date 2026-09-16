@@ -11,8 +11,39 @@ const publicImageName = /\.(jpe?g|png|webp|gif)$/i;
 const publicVideoName = /\.(mp4|webm|mov)$/i;
 
 function isTlsError(error) {
-  const message = `${error?.message || ''} ${error?.cause?.message || ''}`;
-  return /unable to verify the first certificate|self[- ]signed certificate|CERT_HAS_EXPIRED|UNABLE_TO_GET_ISSUER|UNABLE_TO_VERIFY|certificate/i.test(message);
+  const message = [
+    error?.message,
+    error?.cause?.message,
+    error?.error?.message,
+    error?.code,
+    error?.error?.code,
+    error?.cause?.code
+  ].filter(Boolean).join(' ');
+  return /unable to verify|self[- ]signed|CERT_HAS_EXPIRED|UNABLE_TO_GET_ISSUER|UNABLE_TO_VERIFY|UNABLE_TO_VERIFY_LEAF|certificate/i.test(message);
+}
+
+async function withDevTlsRetry(task) {
+  try {
+    return await task();
+  } catch (error) {
+    if (!(isTlsError(error) && env.nodeEnv !== 'production')) throw error;
+    const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    try {
+      console.warn('[storage] Retrying Cloudinary upload without TLS verification (development only).');
+      return await task();
+    } finally {
+      if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+    }
+  }
+}
+
+function uploadPublicCloudinary(file, options) {
+  return withDevTlsRetry(() => new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (error, result) => error ? reject(error) : resolve(result));
+    stream.end(file.buffer);
+  }));
 }
 
 async function storeLocally(file, baseName) {
@@ -116,14 +147,11 @@ export async function storePublicImage(file, _publicBaseUrl, options = {}) {
   const urlPath = options.urlPath || '/api/v1/website-team/photos';
   if (cloudinaryEnabled) {
     try {
-      const uploaded = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream({
-          folder,
-          resource_type: 'image',
-          type: 'upload',
-          overwrite: false
-        }, (error, result) => error ? reject(error) : resolve(result));
-        stream.end(file.buffer);
+      const uploaded = await uploadPublicCloudinary(file, {
+        folder,
+        resource_type: 'image',
+        type: 'upload',
+        overwrite: false
       });
       if (uploaded?.secure_url) return { photoUrl: uploaded.secure_url };
     } catch (error) {
@@ -141,14 +169,11 @@ export async function storePublicVideo(file, _publicBaseUrl) {
   const baseName = `${crypto.randomUUID()}${extension}`;
   if (cloudinaryEnabled) {
     try {
-      const uploaded = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream({
-          folder: 'indonor/website-projects',
-          resource_type: 'video',
-          type: 'upload',
-          overwrite: false
-        }, (error, result) => error ? reject(error) : resolve(result));
-        stream.end(file.buffer);
+      const uploaded = await uploadPublicCloudinary(file, {
+        folder: 'indonor/website-projects',
+        resource_type: 'video',
+        type: 'upload',
+        overwrite: false
       });
       if (uploaded?.secure_url) return { videoUrl: uploaded.secure_url, videoPublicId: uploaded.public_id || '' };
     } catch (error) {

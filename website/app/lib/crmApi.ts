@@ -45,6 +45,7 @@ function crmOrigins() {
 export function toSiteAssetUrl(url?: string | null) {
   const trimmed = String(url || "").trim();
   if (!trimmed) return "";
+  if (/res\.cloudinary\.com/i.test(trimmed)) return trimmed;
   try {
     const parsed = new URL(trimmed, "http://asset.local");
     const match = parsed.pathname.match(crmMediaPath);
@@ -53,7 +54,12 @@ export function toSiteAssetUrl(url?: string | null) {
       const ours = !isAbsolute
         || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)
         || crmOrigins().includes(parsed.origin);
-      if (ours) return `/api/media/${match[1]}/${match[2]}`;
+      if (ours) {
+        if (!isDevelopment()) {
+          return `${serverCrmApiUrl()}/${match[1]}/${match[2]}`;
+        }
+        return `/api/media/${match[1]}/${match[2]}`;
+      }
     }
   } catch {
     return trimmed;
