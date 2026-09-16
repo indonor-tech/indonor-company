@@ -12,6 +12,7 @@ import { AppError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 import { env } from '../../config/env.js';
 import { publicProjectMediaDir, storePublicImage, storePublicVideo } from '../../services/fileStorage.service.js';
+import { normalizeStoredAssetUrl, resolvePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 const router = express.Router();
 const objectId = Joi.string().hex().length(24);
@@ -83,9 +84,9 @@ function normalizeProject(body) {
     details,
     url: body.url || '',
     tags,
-    coverImageUrl: body.coverImageUrl || '',
+    coverImageUrl: normalizeStoredAssetUrl(body.coverImageUrl || ''),
     videoType: parsed.videoType,
-    videoUrl: parsed.videoUrl,
+    videoUrl: parsed.videoType === 'file' ? normalizeStoredAssetUrl(parsed.videoUrl) : parsed.videoUrl,
     videoId: parsed.videoId,
     featured: body.featured !== false,
     status: body.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'COMPLETED',
@@ -96,7 +97,7 @@ function normalizeProject(body) {
 function publicVideo(project) {
   if (project.videoType === 'youtube' && project.videoId) return { type: 'youtube', id: project.videoId };
   if (project.videoType === 'vimeo' && project.videoId) return { type: 'vimeo', id: project.videoId };
-  if (project.videoUrl) return { type: 'file', src: project.videoUrl };
+  if (project.videoUrl) return { type: 'file', src: resolvePublicAssetUrl(project.videoUrl) };
   return null;
 }
 
@@ -109,7 +110,7 @@ function publicProject(project) {
     details: project.details || [],
     url: project.url || '',
     tags: project.tags || [],
-    coverImage: project.coverImageUrl || '',
+    coverImage: resolvePublicAssetUrl(project.coverImageUrl || ''),
     video: publicVideo(project),
     featured: project.featured !== false,
     status: project.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'COMPLETED',
@@ -174,7 +175,7 @@ router.post('/cover', authorize('website:write', 'catalog:create'), imageUpload.
       localDir: publicProjectMediaDir,
       urlPath: '/api/v1/website-projects/media'
     });
-    return sendSuccess(res, { coverImageUrl: stored.photoUrl }, 'Cover uploaded');
+    return sendSuccess(res, { coverImageUrl: normalizeStoredAssetUrl(stored.photoUrl) }, 'Cover uploaded');
   } catch (error) {
     throw new AppError(error.message || 'Could not upload this cover image.', 502);
   }
@@ -184,7 +185,7 @@ router.post('/video', authorize('website:write', 'catalog:create'), videoUpload.
   if (!req.file) throw new AppError('Choose a demo video from your computer.', 422);
   try {
     const stored = await storePublicVideo(req.file, env.activeAppUrl);
-    return sendSuccess(res, { videoUrl: stored.videoUrl, videoPublicId: stored.videoPublicId, videoType: 'file' }, 'Video uploaded');
+    return sendSuccess(res, { videoUrl: normalizeStoredAssetUrl(stored.videoUrl), videoPublicId: stored.videoPublicId, videoType: 'file' }, 'Video uploaded');
   } catch (error) {
     throw new AppError(error.message || 'Could not upload this video to Cloudinary.', 502);
   }

@@ -108,6 +108,17 @@ test('change password requires authentication', async () => {
   assert.equal(response.statusCode, 401);
 });
 
+test('website team photo URLs are stored without a host and resolved to the active API', async () => {
+  const { normalizeStoredAssetUrl, resolvePublicAssetUrl } = await import('../src/utils/publicAssetUrl.js');
+  const filename = 'a7dfad0a-aade-4b3c-9c1d-1234567890ab.jpg';
+  const relative = `/api/v1/website-team/photos/${filename}`;
+  assert.equal(normalizeStoredAssetUrl(`http://localhost:5000${relative}`), relative);
+  assert.equal(normalizeStoredAssetUrl(`https://indonor-tech.onrender.com${relative}`), relative);
+  assert.equal(normalizeStoredAssetUrl('https://res.cloudinary.com/demo/image/upload/photo.jpg'), 'https://res.cloudinary.com/demo/image/upload/photo.jpg');
+  assert.match(resolvePublicAssetUrl(relative), new RegExp(`${relative}$`));
+  assert.match(resolvePublicAssetUrl(`http://127.0.0.1:5000${relative}`), new RegExp(`${relative}$`));
+});
+
 test('user agent parser identifies browsers and bots', async () => {
   const { parseUserAgent } = await import('../src/modules/analytics/parse-user-agent.js');
   const chrome = parseUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36');

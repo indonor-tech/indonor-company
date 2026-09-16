@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, List, ListItemButton, ListItemIcon, ListItemText, Stack, Switch, TextField, Typography } from '@mui/material';
-import { api, apiErrorMessage } from '../services/api';
+import { api, apiErrorMessage, assetUrl } from '../services/api';
 import { countryOptions, stateOptions } from '../utils/geo';
 
 const emptyForm = {
@@ -142,7 +142,7 @@ export default function WebsiteTeam() {
     {rows.map((member, index) => <Card key={member._id}><CardContent>
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'center' }}>
         <Box sx={{ width: 72, height: 72, borderRadius: 2, overflow: 'hidden', bgcolor: '#eef2f3', flexShrink: 0 }}>
-          {member.photoUrl ? <Box component="img" src={member.photoUrl} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+          {member.photoUrl ? <Box component="img" src={assetUrl(member.photoUrl)} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
         </Box>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
@@ -183,7 +183,7 @@ export default function WebsiteTeam() {
             helperText="Select a location, or type one if it is not in the list."
           />
           <Stack spacing={1.25}>
-            {form.photoUrl ? <Box component="img" src={form.photoUrl} alt="" sx={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 2, bgcolor: '#eef2f3' }} /> : null}
+            {form.photoUrl ? <Box component="img" src={assetUrl(form.photoUrl)} alt="" sx={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 2, bgcolor: '#eef2f3' }} /> : null}
             <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
               <Button component="label" variant="outlined" disabled={uploadPhoto.isPending}>
                 {uploadPhoto.isPending ? 'Uploading…' : 'Upload from computer'}
@@ -191,7 +191,7 @@ export default function WebsiteTeam() {
               </Button>
               {form.photoUrl ? <Button size="small" onClick={() => setForm((current) => ({ ...current, photoUrl: '' }))}>Remove photo</Button> : null}
             </Stack>
-            <TextField label="Or paste a photo URL" value={form.photoUrl} onChange={set('photoUrl')} placeholder="https://…" helperText="Use either an uploaded file or a public image URL." />
+            <TextField label="Or paste a photo URL" value={form.photoUrl} onChange={set('photoUrl')} placeholder="https://… or /api/v1/website-team/photos/…" helperText="Uploads are stored without localhost, so they work locally and on the live site. You can also paste a public image URL." />
             {uploadPhoto.isError && <Alert severity="error">{apiErrorMessage(uploadPhoto.error, 'Could not upload this photo.')}</Alert>}
           </Stack>
           <TextField label="Email" value={form.email} onChange={set('email')} />
@@ -219,7 +219,7 @@ export default function WebsiteTeam() {
           <List disablePadding>
             {choices.map((employee) => <ListItemButton key={employee.id} onClick={() => toggleEmployee(employee.id)}>
               <ListItemIcon><Checkbox edge="start" checked={selected.includes(employee.id)} tabIndex={-1} disableRipple /></ListItemIcon>
-              <Avatar src={employee.photoUrl || undefined} alt="" sx={{ width: 40, height: 40, mr: 1.5 }}>{employee.name.slice(0, 1)}</Avatar>
+              <Avatar src={assetUrl(employee.photoUrl) || undefined} alt="" sx={{ width: 40, height: 40, mr: 1.5 }}>{employee.name.slice(0, 1)}</Avatar>
               <ListItemText primary={employee.name} secondary={[employee.role, employee.location].filter(Boolean).join(' · ')} />
             </ListItemButton>)}
           </List>

@@ -1,18 +1,14 @@
 export default function ProjectsHero() {
   return (
-    <section className="relative pt-36 pb-16 px-6 overflow-hidden">
+    <section className="relative overflow-hidden px-6 pt-36 pb-16">
       <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background to-background" />
-      <div className="relative max-w-4xl mx-auto text-center">
-        <p className="text-primary font-semibold tracking-wide mb-3">
-          CLIENT WORK
-        </p>
-        <h1 className="text-4xl md:text-6xl font-bold text-foreground leading-tight">
-          Projects Delivered for Our Clients
+      <div className="relative mx-auto max-w-4xl text-center">
+        <p className="mb-3 font-semibold tracking-wide text-primary">CLIENT WORK</p>
+        <h1 className="text-4xl font-bold leading-tight text-foreground md:text-6xl">
+          Projects delivered and in progress
         </h1>
-        <p className="mt-5 text-lg text-muted-foreground max-w-2xl mx-auto">
-          Selected IndonorTech engagements with live project links, short delivery
-          notes, and demo recordings where available. Six projects in total —
-          completed or currently in progress.
+        <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground">
+          We publish delivery counts only: how many client projects are completed, and how many are currently ongoing.
         </p>
       </div>
     </section>

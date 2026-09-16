@@ -185,11 +185,11 @@ router.post('/events', asyncHandler(async (req, res) => {
       lastSeenAt: now,
       isBot: false
     },
-    $setOnInsert: { sessionId, landingPage, startedAt: now, pages: [] },
+    $setOnInsert: { sessionId, landingPage, startedAt: now },
     $inc: { eventCount: value.events.length }
   };
   if (pagePaths.length) update.$addToSet = { pages: { $each: pagePaths } };
-  const session = await WebsiteSession.findOneAndUpdate({ sessionId }, update, { upsert: true, new: true });
+  const session = await WebsiteSession.findOneAndUpdate({ sessionId }, update, { upsert: true, new: true, setDefaultsOnInsert: true });
   session.pageCount = (session.pages || []).length;
   session.durationMs = Math.max(0, now.getTime() - new Date(session.startedAt).getTime());
   await session.save();

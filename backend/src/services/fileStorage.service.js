@@ -108,13 +108,13 @@ export async function removeFile(document) {
   await fs.rm(path.join(privateDir, document.storageKey), { force: true });
 }
 
-export async function storePublicImage(file, publicBaseUrl, options = {}) {
+export async function storePublicImage(file, _publicBaseUrl, options = {}) {
   const extension = publicImageName.test(file.originalname) ? path.extname(file.originalname).toLowerCase() : '.jpg';
   const baseName = `${crypto.randomUUID()}${extension === '.jpeg' ? '.jpg' : extension}`;
   const folder = options.folder || 'indonor/website-team';
   const localDir = options.localDir || publicTeamPhotoDir;
   const urlPath = options.urlPath || '/api/v1/website-team/photos';
-  if (env.storageProvider === 'cloudinary' && cloudinaryEnabled) {
+  if (cloudinaryEnabled) {
     try {
       const uploaded = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream({
@@ -133,11 +133,10 @@ export async function storePublicImage(file, publicBaseUrl, options = {}) {
   }
   await fs.mkdir(localDir, { recursive: true });
   await fs.writeFile(path.join(localDir, baseName), file.buffer);
-  const origin = String(publicBaseUrl || env.activeAppUrl).replace(/\/$/, '');
-  return { photoUrl: `${origin}${urlPath}/${baseName}` };
+  return { photoUrl: `${urlPath}/${baseName}` };
 }
 
-export async function storePublicVideo(file, publicBaseUrl) {
+export async function storePublicVideo(file, _publicBaseUrl) {
   const extension = publicVideoName.test(file.originalname) ? path.extname(file.originalname).toLowerCase() : '.mp4';
   const baseName = `${crypto.randomUUID()}${extension}`;
   if (cloudinaryEnabled) {
@@ -159,6 +158,5 @@ export async function storePublicVideo(file, publicBaseUrl) {
   }
   await fs.mkdir(publicProjectMediaDir, { recursive: true });
   await fs.writeFile(path.join(publicProjectMediaDir, baseName), file.buffer);
-  const origin = String(publicBaseUrl || env.activeAppUrl).replace(/\/$/, '');
-  return { videoUrl: `${origin}/api/v1/website-projects/media/${baseName}`, videoPublicId: '' };
+  return { videoUrl: `/api/v1/website-projects/media/${baseName}`, videoPublicId: '' };
 }

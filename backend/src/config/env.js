@@ -5,6 +5,9 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 if (!process.env.SERVER_APP_URL && process.env.RENDER_EXTERNAL_URL) {
   process.env.SERVER_APP_URL = process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '');
 }
+if (!process.env.SERVER_APP_URL) {
+  process.env.SERVER_APP_URL = 'https://indonor-tech.onrender.com';
+}
 if (!process.env.SERVER_ADMIN_URL) {
   process.env.SERVER_ADMIN_URL = 'https://indonor-tech.vercel.app';
 }
@@ -21,8 +24,9 @@ const localAppUrl = process.env.LOCAL_APP_URL || `http://localhost:${process.env
 const serverAppUrl = process.env.SERVER_APP_URL || '';
 const localAdminUrl = process.env.LOCAL_ADMIN_URL || 'http://localhost:5173';
 const serverAdminUrl = process.env.SERVER_ADMIN_URL || '';
-const activeAppUrl = nodeEnv === 'development' ? localAppUrl : serverAppUrl;
-const activeAdminUrl = nodeEnv === 'development' ? localAdminUrl : serverAdminUrl;
+const useLocalApp = nodeEnv === 'development' || nodeEnv === 'test';
+const activeAppUrl = useLocalApp ? localAppUrl : serverAppUrl;
+const activeAdminUrl = useLocalApp ? localAdminUrl : serverAdminUrl;
 if (nodeEnv !== 'development' && nodeEnv !== 'test' && process.env.MONGODB_TLS_ALLOW_INVALID_CERTS === 'true') {
   console.warn('Ignoring MONGODB_TLS_ALLOW_INVALID_CERTS in production; TLS certificate validation stays enabled.');
 }

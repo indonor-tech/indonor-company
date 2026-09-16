@@ -87,8 +87,8 @@ export default function Home() {
 
             <div className="mt-10 grid grid-cols-2 gap-4 sm:mt-16 sm:gap-6 md:grid-cols-4">
               <div>
-                <h3 className="text-2xl font-bold text-white sm:text-3xl">6</h3>
-                <p className="text-sm text-white/70 sm:text-base">Projects completed or ongoing</p>
+                <h3 className="text-2xl font-bold text-white sm:text-3xl">Delivery</h3>
+                <p className="text-sm text-white/70 sm:text-base">Projects completed and ongoing</p>
               </div>
 
               <div>

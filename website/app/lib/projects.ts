@@ -27,6 +27,12 @@ export async function fetchWebsiteProjects(): Promise<ClientProject[]> {
   return Array.isArray(result.data) ? result.data : [];
 }
 
+export function projectCounts(projects: ClientProject[]) {
+  const ongoing = projects.filter((project) => project.status === "IN_PROGRESS").length;
+  const done = projects.filter((project) => project.status !== "IN_PROGRESS").length;
+  return { done, ongoing, total: projects.length };
+}
+
 export function featuredProjects(projects: ClientProject[], limit = 6) {
   const selected = projects.filter((project) => project.featured !== false);
   return (selected.length ? selected : projects).slice(0, limit);
