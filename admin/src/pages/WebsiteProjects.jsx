@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
-import { api, apiErrorMessage } from '../services/api';
+import { api, apiErrorMessage, assetUrl } from '../services/api';
 
 const emptyForm = {
   title: '', client: '', summary: '', detailsText: '', url: '', tagsText: '',
@@ -101,7 +101,7 @@ export default function WebsiteProjects() {
     {rows.map((project, index) => <Card key={project._id}><CardContent>
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'center' }}>
         <Box sx={{ width: 120, height: 72, borderRadius: 2, overflow: 'hidden', bgcolor: '#eef2f3', flexShrink: 0 }}>
-          {project.coverImageUrl ? <Box component="img" src={project.coverImageUrl} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+          {project.coverImageUrl ? <Box component="img" src={assetUrl(project.coverImageUrl)} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
         </Box>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
@@ -132,7 +132,7 @@ export default function WebsiteProjects() {
           <TextField label="Live project URL" value={form.url} onChange={set('url')} placeholder="https://…" />
           <TextField label="Tags" value={form.tagsText} onChange={set('tagsText')} placeholder="Marketplace, Web App" helperText="Separate tags with commas." />
           <Stack spacing={1.25}>
-            {form.coverImageUrl ? <Box component="img" src={form.coverImageUrl} alt="" sx={{ width: 180, height: 110, objectFit: 'cover', borderRadius: 2, bgcolor: '#eef2f3' }} /> : null}
+            {form.coverImageUrl ? <Box component="img" src={assetUrl(form.coverImageUrl)} alt="" sx={{ width: 180, height: 110, objectFit: 'cover', borderRadius: 2, bgcolor: '#eef2f3' }} /> : null}
             <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
               <Button component="label" variant="outlined" disabled={uploadCover.isPending}>
                 {uploadCover.isPending ? 'Uploading…' : 'Upload cover'}

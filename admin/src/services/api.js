@@ -38,6 +38,38 @@ api.interceptors.response.use((response) => response, async (error) => {
 });
 export const unwrap = (request) => request.then(({ data }) => data);
 
+function originOf(value) {
+  try { return new URL(value).origin; } catch { return ''; }
+}
+
+function serverOrigin() {
+  return String(serverAppUrl || 'https://indonor-tech.onrender.com/api/v1').replace(/\/api\/v1\/?$/, '');
+}
+
+function isOurApiHost(hostname, origin, pathname) {
+  if (!String(pathname || '').startsWith('/api/v1/')) return false;
+  if (/^(localhost|127\.0\.0\.1)$/i.test(hostname)) return true;
+  return [originOf(serverOrigin()), originOf('https://indonor-tech.onrender.com')].includes(origin);
+}
+
+export function assetUrl(url) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed || /^(data:|blob:)/i.test(trimmed)) return trimmed;
+  let path = trimmed;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      if (!isOurApiHost(parsed.hostname, parsed.origin, parsed.pathname)) return trimmed;
+      path = `${parsed.pathname}${parsed.search}`;
+    } catch {
+      return trimmed;
+    }
+  }
+  if (!path.startsWith('/')) path = `/${path}`;
+  if (!path.startsWith('/api/v1/') && /^https?:\/\//i.test(trimmed)) return trimmed;
+  return isDevelopment ? path : `${serverOrigin()}${path}`;
+}
+
 export function apiErrorMessage(error, fallback = 'Request failed') {
   const details = (error.response?.data?.errors || []).map((item) => item.message || item).filter(Boolean).join('; ');
   if (error.response?.data?.message) return details ? `${error.response.data.message}. ${details}` : error.response.data.message;

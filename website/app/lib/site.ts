@@ -96,7 +96,7 @@ export const pageSeo = {
   projects: {
     title: "Client Projects | IndonorTech Delivery Portfolio",
     description:
-      "Explore IndonorTech client projects with live URLs, delivery details, and demo video recordings from Norway–India consulting engagements.",
+      "See how many IndonorTech client projects are completed and how many are currently ongoing.",
     path: "/projects",
     keywords: [
       "IndonorTech projects",

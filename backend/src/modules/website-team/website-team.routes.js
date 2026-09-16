@@ -14,6 +14,7 @@ import { sendSuccess } from '../../utils/response.js';
 import { env } from '../../config/env.js';
 import { publicTeamPhotoDir, storePublicImage } from '../../services/fileStorage.service.js';
 import { findProfilePhoto, profilePhotoFilePath, sendProfilePhoto } from '../common/profilePhoto.js';
+import { normalizeStoredAssetUrl, resolvePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 const router = express.Router();
 const objectId = Joi.string().hex().length(24);
@@ -131,12 +132,18 @@ function employeeIdFromPhotoUrl(url) {
 }
 
 function memberPhotoUrl(member) {
-  if (isPublicPhotoUrl(member.photoUrl)) return member.photoUrl;
-  const employee = member?.employeeId && typeof member.employeeId === 'object' ? member.employeeId : null;
-  if (employee?.profilePhotoUrl || employeePhotoPath.test(member.photoUrl || '')) {
-    return `${String(env.activeAppUrl).replace(/\/$/, '')}/api/v1/website-team/member-photos/${member._id}`;
+  const raw = String(member.photoUrl || '').trim();
+  if (isPublicPhotoUrl(raw)) return resolvePublicAssetUrl(raw);
+  if (employeePhotoPath.test(raw) || member.employeeId) {
+    return resolvePublicAssetUrl(`/api/v1/website-team/member-photos/${member._id}`);
   }
-  return '';
+  return resolvePublicAssetUrl(raw);
+}
+
+function memberPayload(body, fallback = {}) {
+  const payload = withRoles(body, fallback);
+  if (payload.photoUrl !== undefined) payload.photoUrl = normalizeStoredAssetUrl(payload.photoUrl);
+  return payload;
 }
 
 function publicMember(member) {
@@ -164,22 +171,22 @@ async function copyEmployeePhotoToPublic(employee) {
       buffer,
       mimetype: 'image/jpeg'
     }, env.activeAppUrl);
-    return stored.photoUrl || '';
+    return normalizeStoredAssetUrl(stored.photoUrl || '');
   } catch {
     return '';
   }
 }
 
+async function listWebsiteTeamMembers() {
+  return WebsiteTeamMember.find({ isDeleted: false }).sort({ displayOrder: 1, createdAt: 1 }).lean();
+}
+
 router.get('/public', asyncHandler(async (_req, res) => {
   if (mongoose.connection.readyState !== 1) {
-    return sendSuccess(res, [], 'Team fetched');
+    return sendSuccess(res, [], 'Website team fetched');
   }
-  const members = await WebsiteTeamMember.find({ isDeleted: false })
-    .select(publicFields)
-    .populate('employeeId', 'profilePhotoUrl')
-    .sort({ displayOrder: 1, createdAt: 1 })
-    .lean();
-  return sendSuccess(res, members.map(publicMember), 'Team fetched');
+  const members = await listWebsiteTeamMembers();
+  return sendSuccess(res, members.map(publicMember), 'Website team fetched');
 }));
 
 router.get('/employee-photos/:id', asyncHandler(async (req, res) => {
@@ -214,7 +221,7 @@ router.get('/member-photos/:id', asyncHandler(async (req, res) => {
 router.use(authenticate, authorize('website:read', 'catalog:read'));
 
 router.get('/', asyncHandler(async (_req, res) => {
-  const members = await WebsiteTeamMember.find({ isDeleted: false }).sort({ displayOrder: 1, createdAt: 1 }).lean();
+  const members = await listWebsiteTeamMembers();
   return sendSuccess(res, members, 'Website team fetched');
 }));
 
@@ -237,7 +244,7 @@ router.post('/photo', authorize('website:write', 'catalog:create'), photoUpload.
   if (!req.file) throw new AppError('Choose a photo from your computer.', 422);
   try {
     const stored = await storePublicImage(req.file, env.activeAppUrl);
-    return sendSuccess(res, { photoUrl: stored.photoUrl }, 'Photo uploaded');
+    return sendSuccess(res, { photoUrl: normalizeStoredAssetUrl(stored.photoUrl) }, 'Photo uploaded');
   } catch (error) {
     throw new AppError(error.message || 'Could not upload this photo.', 502);
   }
@@ -245,7 +252,7 @@ router.post('/photo', authorize('website:write', 'catalog:create'), photoUpload.
 
 router.post('/', authorize('website:write', 'catalog:create'), validate(memberInput), asyncHandler(async (req, res) => {
   const displayOrder = req.body.displayOrder ?? await nextDisplayOrder();
-  const member = await WebsiteTeamMember.create({ ...withRoles(req.body), source: 'manual', employeeId: null, displayOrder });
+  const member = await WebsiteTeamMember.create({ ...memberPayload(req.body), source: 'manual', employeeId: null, displayOrder });
   return sendSuccess(res, member, 'Team member added');
 }));
 
@@ -281,7 +288,7 @@ router.patch('/reorder', authorize('website:write', 'catalog:create'), validate(
 router.patch('/:id', authorize('website:write', 'catalog:create'), validate(memberInput.fork(['name', 'role'], (schema) => schema.optional())), asyncHandler(async (req, res) => {
   const current = await WebsiteTeamMember.findOne({ _id: req.params.id, isDeleted: false });
   if (!current) throw new AppError('Team member not found', 404);
-  Object.assign(current, withRoles(req.body, current));
+  Object.assign(current, memberPayload(req.body, current));
   await current.save();
   return sendSuccess(res, current, 'Team member updated');
 }));
