@@ -63,6 +63,30 @@ function isVercelAdminOrigin(origin) {
   }
 }
 
+function mailSettings() {
+  const user = (process.env.GMAIL_USER || process.env.SMTP_USER || '').trim();
+  const rawHost = (process.env.SMTP_HOST || '').trim();
+  const looksLikeGmail = /@(gmail|googlemail)\.com$/i.test(user) || /gmail\.com$/i.test(rawHost) || Boolean(process.env.GMAIL_USER);
+  const fallbackProvider = nodeEnv === 'test' ? 'json' : rawHost && !looksLikeGmail ? 'smtp' : 'gmail';
+  const provider = (process.env.MAIL_PROVIDER || fallbackProvider).trim().toLowerCase();
+  const gmail = provider === 'gmail';
+  const host = gmail ? 'smtp.gmail.com' : rawHost;
+  const port = Number(process.env.SMTP_PORT || 465);
+  // Google shows App Passwords as four space-separated groups; SMTP needs them without spaces.
+  const rawPassword = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '';
+  const password = gmail ? rawPassword.replace(/\s+/g, '') : rawPassword;
+  return {
+    provider,
+    host,
+    port,
+    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465,
+    user,
+    password,
+    from: ([process.env.MAIL_FROM, process.env.EMAIL_FROM].find((value) => value?.trim() && !/@example\.(com|org)\b/i.test(value)) || user).trim(),
+    fromName: (process.env.MAIL_FROM_NAME || 'Indonor Tech').trim()
+  };
+}
+
 export function isCorsOriginAllowed(origin) {
   if (!origin) return true;
   if (corsAllowedOrigins.includes(origin)) return true;
@@ -88,13 +112,7 @@ export const env = {
   accessExpiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '1h',
   refreshExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
-  mail: {
-    host: process.env.SMTP_HOST || '',
-    port: Number(process.env.SMTP_PORT || 465),
-    user: process.env.SMTP_USER || '',
-    password: process.env.SMTP_PASSWORD || '',
-    from: process.env.MAIL_FROM || process.env.SMTP_USER || ''
-  },
+  mail: mailSettings(),
   storageProvider: process.env.FILE_STORAGE_PROVIDER || 'local',
   companyCode: (process.env.COMPANY_CODE || 'INDO').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'INDO',
   analyticsIngestKey: process.env.WEBSITE_ANALYTICS_INGEST_KEY || '',

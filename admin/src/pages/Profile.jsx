@@ -180,6 +180,7 @@ export default function Profile({ type, profileId, self }) {
         {type === 'candidates' && can('candidate:update') && (passed || ['SELECTED', 'OFFER_SENT', 'OFFER_ACCEPTED'].includes(data.status)) && !data.convertedEmployeeId && <Button variant="contained" onClick={() => setOffering(true)}>Generate offer letter</Button>}
         {canConvert && <Button variant={type === 'candidates' && (passed || data.status === 'OFFER_SENT') ? 'outlined' : 'contained'} onClick={() => setConverting(true)}>Convert to employee</Button>}
         {data.convertedEmployeeId && <Button onClick={() => navigate(`/employees/${data.convertedEmployeeId}`)}>Open employee</Button>}
+        {!isSelf && can('email:send') && (data.companyEmail || data.personalEmail || data.email) && <Button variant="outlined" onClick={() => navigate(`/email?to=${encodeURIComponent(data.companyEmail || data.personalEmail || data.email)}`)}>Send email</Button>}
         {!isSelf && type === 'employees' && can('employee:update') && (
           <>
             <Button variant="outlined" onClick={() => navigate(`/letters/offer?employeeId=${id}`)}>Offer letter</Button>
