@@ -14,7 +14,7 @@ const candidateSchema = new mongoose.Schema({
   applyingPosition: { type: String, required: true },
   applyingTrack: { type: String, trim: true, default: '' },
   source: String, recruiter: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  status: { type: String, enum: ['NEW', 'SCREENING', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'SELECTED', 'REJECTED', 'ON_HOLD', 'OFFER_SENT', 'OFFER_ACCEPTED', 'OFFER_REJECTED', 'JOINED', 'WITHDRAWN'], default: 'NEW', index: true },
+  status: { type: String, enum: ['NEW', 'SCREENING', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'SELECTED', 'REJECTED', 'ON_HOLD', 'OFFER_SENT', 'OFFER_ACCEPTED', 'OFFER_REJECTED', 'JOINED', 'WITHDRAWN', 'NOT_INTERESTED', 'NO_SHOW', 'NOT_REACHABLE', 'ON_LEAVE', 'LEFT', 'BLACKLISTED'], default: 'NEW', index: true },
   followUpDate: { type: Date, index: true }, followUpIntervalMonths: Number, offerExpiryDate: Date, notes: String, convertedEmployeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
   offerJoiningDate: Date,
   offerSalary: Number,

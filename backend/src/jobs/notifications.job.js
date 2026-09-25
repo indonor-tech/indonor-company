@@ -18,7 +18,7 @@ export function startNotificationJobs() {
     const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
     const interviews = await Interview.find({ interviewDate: { $gte: today, $lt: tomorrow }, status: 'SCHEDULED', isDeleted: false }).lean();
     for (const interview of interviews) await createForUsers('INTERVIEW_TODAY', 'Interview today', 'An interview is scheduled for today.', 'Interview', interview._id, today, `interview:${interview._id}:${today.toISOString().slice(0, 10)}`);
-    const followups = await Candidate.find({ followUpDate: { $lte: tomorrow }, isDeleted: false, status: { $nin: ['JOINED', 'WITHDRAWN'] } }).lean();
+    const followups = await Candidate.find({ followUpDate: { $lte: tomorrow }, isDeleted: false, status: { $nin: ['JOINED', 'WITHDRAWN', 'NOT_INTERESTED', 'LEFT', 'BLACKLISTED'] } }).lean();
     for (const candidate of followups) await createForUsers('FOLLOW_UP_DUE', 'Candidate follow-up due', `${candidate.firstName} ${candidate.lastName} requires follow-up.`, 'Candidate', candidate._id, candidate.followUpDate, `followup:${candidate._id}:${candidate.followUpDate?.toISOString()}`);
     const employees = await Employee.find({ probationEndDate: { $gte: today, $lte: new Date(today.getTime() + 30 * 86400000) }, isDeleted: false }).lean();
     for (const employee of employees) await createForUsers('PROBATION_ENDING', 'Probation ending soon', `${employee.firstName} ${employee.lastName}'s probation is ending soon.`, 'Employee', employee._id, employee.probationEndDate, `probation:${employee._id}:${employee.probationEndDate?.toISOString()}`);
