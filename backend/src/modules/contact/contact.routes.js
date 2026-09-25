@@ -1,8 +1,8 @@
 import express from 'express';
-import nodemailer from 'nodemailer';
 import Joi from 'joi';
 import ContactSubmission from './contact.model.js';
 import { env } from '../../config/env.js';
+import { isMailConfigured, sendMail } from '../../services/mailer.service.js';
 import { authenticate, authorize } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { AppError } from '../../utils/errors.js';
@@ -27,18 +27,11 @@ function escapeRegex(value) {
 }
 
 async function sendNotification(submission) {
-  if (!env.mail.host || !env.mail.user || !env.mail.password || !env.mail.from) {
+  if (!isMailConfigured() || !env.mail.user) {
     return { status: 'NOT_CONFIGURED' };
   }
   try {
-    const transporter = nodemailer.createTransport({
-      host: env.mail.host,
-      port: env.mail.port,
-      secure: env.mail.port === 465,
-      auth: { user: env.mail.user, pass: env.mail.password }
-    });
-    await transporter.sendMail({
-      from: env.mail.from,
+    await sendMail({
       to: env.mail.user,
       replyTo: submission.email,
       subject: `[Website contact] ${submission.subject}`,

@@ -13,7 +13,7 @@ import { RoleSelect, TrackSelect, formatApplyingRole } from '../components/GeoFi
 const employeeTypes = ['FULL_TIME', 'PART_TIME', 'INTERN', 'CONTRACTOR', 'FREELANCER', 'TEMPORARY'];
 const employeeStatuses = ['ACTIVE', 'ON_PROBATION', 'ON_LEAVE', 'RESIGNED', 'TERMINATED', 'INACTIVE', 'COMPLETED'];
 const workModes = ['ONSITE', 'HYBRID', 'REMOTE'];
-const candidateStatuses = ['NEW', 'SCREENING', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'SELECTED', 'REJECTED', 'ON_HOLD', 'OFFER_SENT', 'OFFER_ACCEPTED', 'JOINED', 'WITHDRAWN'];
+const candidateStatuses = ['NEW', 'SCREENING', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'INTERVIEWED', 'SELECTED', 'REJECTED', 'ON_HOLD', 'OFFER_SENT', 'OFFER_ACCEPTED', 'OFFER_REJECTED', 'JOINED', 'WITHDRAWN', 'NOT_INTERESTED', 'NO_SHOW', 'NOT_REACHABLE', 'ON_LEAVE', 'LEFT', 'BLACKLISTED'];
 
 const configs = {
   employees: {

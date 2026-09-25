@@ -8,6 +8,7 @@
     "start": "node src/app.js",
     "build": "node scripts/build-check.mjs",
     "seed": "node src/database/seed.js",
+    "db:task-indexes": "node scripts/sync-task-indexes.mjs",
     "test": "node --test"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "googleapis": "^180.0.0",
@@ -32,12 +34,14 @@
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.10.38",
     "pdfkit": "^0.20.2",
+    "sanitize-html": "^2.17.7",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tesseract.js": "^5.1.1",
     "word-extractor": "^1.0.4"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^10.4.3",
     "supertest": "^7.1.0"
   }
 }

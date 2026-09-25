@@ -6,7 +6,7 @@ import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { AppError } from '../../utils/errors.js';
 import { pagination, sendSuccess } from '../../utils/response.js';
-import { assignableRoles, canManageRole, DEFAULT_EMPLOYEE_TAB_ACCESS, normalizeRole, normalizeTabAccess, permissionsForRole, publicUser } from '../auth/roles.js';
+import { assignableRoles, canManageRole, DEFAULT_EMPLOYEE_TAB_ACCESS, normalizeRole, normalizeTabAccess, permissionsForRole, publicUser, SELF_SERVICE_ROLES } from '../auth/roles.js';
 
 const router = express.Router();
 const objectId = Joi.string().hex().length(24).allow('', null);
@@ -14,7 +14,7 @@ const createInput = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }).required(),
   password: Joi.string().min(8).max(72).required(),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'EMPLOYEE').required(),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE').required(),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)
@@ -23,7 +23,7 @@ const updateInput = Joi.object({
   name: Joi.string().trim().min(2).max(120),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }),
   password: Joi.string().min(8).max(72).allow(''),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'EMPLOYEE'),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)
@@ -59,7 +59,7 @@ router.post('/', authorize('users:write'), validate(createInput), asyncHandler(a
       email: req.body.email,
       role,
       permissions: permissionsForRole(role),
-      tabAccess: role === 'EMPLOYEE' ? normalizeTabAccess(role, req.body.tabAccess || DEFAULT_EMPLOYEE_TAB_ACCESS) : undefined,
+      tabAccess: SELF_SERVICE_ROLES.includes(role) ? normalizeTabAccess(role, req.body.tabAccess || DEFAULT_EMPLOYEE_TAB_ACCESS) : undefined,
       employeeId: req.body.employeeId || null,
       isActive: req.body.isActive !== false,
       passwordHash: await User.hashPassword(req.body.password)
@@ -86,7 +86,7 @@ router.patch('/:id', authorize('users:write'), validate(updateInput), asyncHandl
     user.role = nextRole;
     user.permissions = permissionsForRole(nextRole);
   }
-  if (nextRole === 'EMPLOYEE') {
+  if (SELF_SERVICE_ROLES.includes(nextRole)) {
     user.tabAccess = normalizeTabAccess(nextRole, req.body.tabAccess || user.tabAccess || DEFAULT_EMPLOYEE_TAB_ACCESS);
   } else if (user.tabAccess != null) {
     user.tabAccess = undefined;

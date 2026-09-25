@@ -85,7 +85,7 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 }));
 router.post('/change-password', authenticate, asyncHandler(async (req, res) => {
   const role = normalizeRole(req.user.role);
-  if (role === 'EMPLOYEE' || role === 'MANAGER') {
+  if (role === 'EMPLOYEE' || role === 'TEAM_LEAD' || role === 'MANAGER') {
     throw new AppError('Ask an Admin to update your password. You cannot change your CRM password or role.', 403);
   }
   const schema = Joi.object({ currentPassword: Joi.string().required(), newPassword: Joi.string().min(8).max(72).required() });

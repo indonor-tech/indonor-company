@@ -7,7 +7,7 @@ import { authenticate, authorize } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../utils/errors.js';
-import { hasPermission, normalizeRole } from '../auth/roles.js';
+import { hasPermission, normalizeRole, SELF_SERVICE_ROLES } from '../auth/roles.js';
 
 const router = express.Router();
 const csvValue = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
@@ -39,7 +39,7 @@ async function employeeHome(user) {
 }
 
 router.get('/', authenticate, asyncHandler(async (req, res) => {
-  if (normalizeRole(req.user.role) === 'EMPLOYEE') {
+  if (SELF_SERVICE_ROLES.includes(normalizeRole(req.user.role))) {
     return sendSuccess(res, await employeeHome(req.user), 'Your dashboard fetched');
   }
   if (!hasPermission(req.user, 'reports:read')) throw new AppError('You do not have permission for this action', 403);

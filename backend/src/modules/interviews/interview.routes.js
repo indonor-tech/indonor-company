@@ -80,7 +80,7 @@ function applyResult(interview, { result, notes, userId, technicalScore, communi
 async function applyCandidateInterviewStatus(candidateId, result) {
   const candidate = await Candidate.findById(candidateId);
   if (!candidate || candidate.convertedEmployeeId) return;
-  if (['JOINED', 'REJECTED', 'WITHDRAWN', 'OFFER_REJECTED'].includes(candidate.status)) return;
+  if (['JOINED', 'REJECTED', 'WITHDRAWN', 'OFFER_REJECTED', 'NOT_INTERESTED', 'LEFT', 'BLACKLISTED'].includes(candidate.status)) return;
   candidate.status = result === 'PASS' ? 'SELECTED' : 'INTERVIEWED';
   await candidate.save();
 }
