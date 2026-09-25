@@ -1,11 +1,30 @@
-export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE'];
+export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
 
 export const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   MANAGER: 'Manager',
+  TEAM_LEAD: 'Team Lead',
   EMPLOYEE: 'Employee'
 };
+
+export const SELF_SERVICE_ROLES = ['EMPLOYEE', 'TEAM_LEAD'];
+
+export const TASK_PERMISSIONS = [
+  'task:create', 'task:read', 'task:read:all', 'task:read:team', 'task:assign', 'task:update:any',
+  'task:correction:approve', 'task:audit:read', 'task:reports:read', 'task:reports:export',
+  'task:projects:manage', 'task:calendar:manage', 'worklog:read:all'
+];
+
+const TASK_MANAGER_PERMISSIONS = [
+  'task:create', 'task:read', 'task:read:all', 'task:assign', 'task:update:any',
+  'task:correction:approve', 'task:audit:read', 'task:reports:read', 'task:reports:export',
+  'task:projects:manage', 'worklog:read:all'
+];
+
+const TASK_TEAM_LEAD_PERMISSIONS = ['task:create', 'task:read', 'task:read:team', 'task:assign', 'task:audit:read', 'task:reports:read'];
+
+const TASK_EMPLOYEE_PERMISSIONS = ['task:create', 'task:read'];
 
 const LEGACY_ROLES = {
   HR_ADMIN: 'ADMIN',
@@ -21,7 +40,8 @@ const ADMIN_PERMISSIONS = [
   'salary:read', 'salary:update', 'documents:read', 'documents:upload', 'documents:delete',
   'reports:read', 'analytics:read', 'website:read', 'website:write', 'audit:read',
   'catalog:read', 'catalog:create', 'users:read', 'users:write', 'email:send',
-  'contact:read', 'contact:update'
+  'contact:read', 'contact:update',
+  ...TASK_PERMISSIONS
 ];
 
 const MANAGER_PERMISSIONS = [
@@ -29,14 +49,16 @@ const MANAGER_PERMISSIONS = [
   'candidate:create', 'candidate:read', 'candidate:update',
   'interview:create', 'interview:read', 'interview:update',
   'documents:read', 'documents:upload',
-  'reports:read', 'catalog:read', 'email:send', 'contact:read'
+  'reports:read', 'catalog:read', 'email:send', 'contact:read',
+  ...TASK_MANAGER_PERMISSIONS
 ];
 
 export const ROLE_PERMISSIONS = {
   SUPER_ADMIN: ADMIN_PERMISSIONS,
   ADMIN: ADMIN_PERMISSIONS,
   MANAGER: MANAGER_PERMISSIONS,
-  EMPLOYEE: []
+  TEAM_LEAD: TASK_TEAM_LEAD_PERMISSIONS,
+  EMPLOYEE: TASK_EMPLOYEE_PERMISSIONS
 };
 
 export const EMPLOYEE_PROFILE_TABS = [
@@ -77,7 +99,7 @@ const SELF_TAB_FIELDS = {
 };
 
 export function normalizeTabAccess(role, stored) {
-  if (normalizeRole(role) !== 'EMPLOYEE') return null;
+  if (!SELF_SERVICE_ROLES.includes(normalizeRole(role))) return null;
   const next = { ...DEFAULT_EMPLOYEE_TAB_ACCESS };
   for (const tab of EMPLOYEE_PROFILE_TABS) {
     const value = stored?.[tab.key];
@@ -148,8 +170,8 @@ export function hasPermission(user, permission) {
 
 export function assignableRoles(actorRole) {
   const role = normalizeRole(actorRole);
-  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'EMPLOYEE'];
-  if (role === 'ADMIN') return ['MANAGER', 'EMPLOYEE'];
+  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
+  if (role === 'ADMIN') return ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
   return [];
 }
 

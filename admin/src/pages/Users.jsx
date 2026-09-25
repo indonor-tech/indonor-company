@@ -7,7 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { DEFAULT_EMPLOYEE_TAB_ACCESS, EMPLOYEE_PROFILE_TABS, tabAccessOf } from '../constants/employeeTabs';
 
 const emptyForm = { name: '', email: '', password: '', role: 'EMPLOYEE', employeeId: '', isActive: true, tabAccess: { ...DEFAULT_EMPLOYEE_TAB_ACCESS } };
-const roleLabel = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', MANAGER: 'Manager', EMPLOYEE: 'Employee' };
+const roleLabel = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', MANAGER: 'Manager', TEAM_LEAD: 'Team Lead', EMPLOYEE: 'Employee' };
+const SELF_SERVICE_ROLES = ['EMPLOYEE', 'TEAM_LEAD'];
 
 function employeeName(employee) {
   return [employee?.firstName, employee?.lastName].filter(Boolean).join(' ');
@@ -24,7 +25,7 @@ export default function Users() {
   const [editingId, setEditingId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const assignable = user?.role === 'SUPER_ADMIN' ? ['ADMIN', 'MANAGER', 'EMPLOYEE'] : ['MANAGER', 'EMPLOYEE'];
+  const assignable = user?.role === 'SUPER_ADMIN' ? ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'] : ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
   const users = useQuery({ queryKey: ['crm-users'], queryFn: () => api.get('/users').then((response) => response.data.data) });
   const employees = useQuery({
     queryKey: ['employees', 'user-link'],
@@ -43,7 +44,7 @@ export default function Users() {
       };
       if (form.employeeId) payload.employeeId = form.employeeId;
       if (form.password.trim()) payload.password = form.password.trim();
-      if (form.role === 'EMPLOYEE') payload.tabAccess = tabAccessOf(form.tabAccess);
+      if (SELF_SERVICE_ROLES.includes(form.role)) payload.tabAccess = tabAccessOf(form.tabAccess);
       return editingId ? api.patch(`/users/${editingId}`, payload) : api.post('/users', { ...payload, password: form.password.trim() });
     },
     onSuccess: () => { client.invalidateQueries({ queryKey: ['crm-users'] }); setOpen(false); setShowPassword(false); }
@@ -108,7 +109,7 @@ export default function Users() {
         </TableRow>)}</TableBody>
       </Table>}
     </CardContent></Card>
-    <Dialog open={open} onClose={closeDialog} fullWidth maxWidth={form.role === 'EMPLOYEE' ? 'md' : 'sm'}>
+    <Dialog open={open} onClose={closeDialog} fullWidth maxWidth={SELF_SERVICE_ROLES.includes(form.role) ? 'md' : 'sm'}>
       <DialogTitle>{editingId ? 'Edit CRM user' : 'Add CRM user'}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -170,7 +171,7 @@ export default function Users() {
             }}
           />
           <FormControlLabel control={<Switch checked={form.isActive} onChange={set('isActive')} />} label="Active login" />
-          {form.role === 'EMPLOYEE' && <Box>
+          {SELF_SERVICE_ROLES.includes(form.role) && <Box>
             <Typography variant="subtitle2">My profile tabs</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Choose what this employee can see and edit after they sign in. Salary, interviews, and timeline cannot be edited by the employee.</Typography>
             <Stack spacing={1.2}>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
 import { useAuth } from './context/AuthContext';
@@ -24,6 +24,17 @@ import Users from './pages/Users';
 import MyProfile from './pages/MyProfile';
 import Letters from './pages/Letters';
 
+const TaskDashboard = lazy(() => import('./pages/tasks/TaskDashboard'));
+const TaskList = lazy(() => import('./pages/tasks/TaskList'));
+const TaskDetail = lazy(() => import('./pages/tasks/TaskDetail'));
+const WorkLogs = lazy(() => import('./pages/tasks/WorkLogs'));
+const TaskCalendar = lazy(() => import('./pages/tasks/TaskCalendar'));
+const Projects = lazy(() => import('./pages/tasks/Projects'));
+const TaskReports = lazy(() => import('./pages/tasks/TaskReports'));
+const TaskAuditHistory = lazy(() => import('./pages/tasks/TaskAuditHistory'));
+const Corrections = lazy(() => import('./pages/tasks/Corrections'));
+const CalendarSetup = lazy(() => import('./pages/tasks/CalendarSetup'));
+
 function Protected() {
   const { user, loading } = useAuth();
   if (loading) return <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}><CircularProgress /></Box>;
@@ -36,7 +47,7 @@ function Require({ permission, permissions, roles, children }) {
   if (permission && !can(permission)) return <Navigate to="/" replace />;
   if (permissions?.length && !permissions.some((item) => can(item))) return <Navigate to="/" replace />;
   if (roles?.length && !is(...roles)) return <Navigate to="/" replace />;
-  return children;
+  return <Suspense fallback={<Box sx={{ display: 'grid', placeItems: 'center', minHeight: 300 }}><CircularProgress /></Box>}>{children}</Suspense>;
 }
 
 export default function App() {
@@ -60,6 +71,17 @@ export default function App() {
           <Route path="website-analytics" element={<Require permission="analytics:read"><WebsiteAnalytics /></Require>} />
           <Route path="website-team" element={<Require permission="website:read"><WebsiteTeam /></Require>} />
           <Route path="website-projects" element={<Require permission="website:read"><WebsiteProjects /></Require>} />
+          <Route path="tasks" element={<Require permission="task:read"><TaskDashboard /></Require>} />
+          <Route path="tasks/my" element={<Require permission="task:read"><TaskList key="my" mode="my" /></Require>} />
+          <Route path="tasks/all" element={<Require permissions={['task:read:all', 'task:read:team']}><TaskList key="all" mode="all" /></Require>} />
+          <Route path="tasks/work-logs" element={<Require permission="task:read"><WorkLogs /></Require>} />
+          <Route path="tasks/calendar" element={<Require permission="task:read"><TaskCalendar /></Require>} />
+          <Route path="tasks/projects" element={<Require permission="task:read"><Projects /></Require>} />
+          <Route path="tasks/corrections" element={<Require permission="task:read"><Corrections /></Require>} />
+          <Route path="tasks/reports" element={<Require permission="task:reports:read"><TaskReports /></Require>} />
+          <Route path="tasks/audit" element={<Require permission="task:audit:read"><TaskAuditHistory /></Require>} />
+          <Route path="tasks/setup" element={<Require permission="task:calendar:manage"><CalendarSetup /></Require>} />
+          <Route path="tasks/:id" element={<Require permission="task:read"><TaskDetail /></Require>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="email" element={<Require permission="email:send"><Email /></Require>} />
           <Route path="letters/offer" element={<Require permissions={['employee:update', 'candidate:update']}><Letters kind="offer" /></Require>} />

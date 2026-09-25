@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { appendOnlyPlugin } from '../../utils/appendOnly.js';
 
 const documentSchema = new mongoose.Schema({
   ownerType: { type: String, enum: ['Employee', 'Candidate'], required: true }, ownerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
@@ -29,11 +30,14 @@ const auditSchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, action: { type: String, index: true }, entityType: String, entityId: mongoose.Schema.Types.ObjectId,
   changes: mongoose.Schema.Types.Mixed, ipAddress: String, userAgent: String, occurredAt: { type: Date, default: Date.now, index: true }
 }, { timestamps: true });
+auditSchema.plugin(appendOnlyPlugin, { modelName: 'AuditLog' });
 
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }, type: String, title: String, message: String,
-  entityType: String, entityId: mongoose.Schema.Types.ObjectId, dueDate: Date, dedupeKey: { type: String, unique: true, sparse: true }, readAt: Date
+  entityType: String, entityId: mongoose.Schema.Types.ObjectId, dueDate: Date, dedupeKey: { type: String, unique: true, sparse: true }, readAt: Date,
+  link: String, actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
+notificationSchema.index({ recipient: 1, readAt: 1, createdAt: -1 });
 
 export const Document = mongoose.model('Document', documentSchema);
 export const SalaryHistory = mongoose.model('SalaryHistory', salarySchema);
