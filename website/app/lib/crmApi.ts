@@ -1,41 +1,68 @@
-import "server-only";
+const LOCAL_CRM_API = "http://127.0.0.1:5000/api/v1";
+const HOSTED_CRM_API = "https://indonor-tech.onrender.com/api/v1";
 
-function normalizeUrl(url?: string) {
-  return url?.trim().replace(/\/$/, "");
+function isDevelopment() {
+  return process.env.NODE_ENV === "development";
 }
 
-export function crmApiCandidates(): string[] {
-  const isDevelopment = process.env.NODE_ENV === "development";
-
-  const candidates = isDevelopment
-    ? [
-        process.env.CRM_LOCAL_API_URL,
-        process.env.CRM_SERVER_API_URL,
-      ]
-    : [
-        process.env.CRM_SERVER_API_URL,
-      ];
-
-  return candidates
-    .map(normalizeUrl)
-    .filter((url): url is string => Boolean(url));
+function normalizeCrmUrl(raw: string) {
+  return raw.replace(/\/$/, "").replace("://localhost", "://127.0.0.1").replace("://[::1]", "://127.0.0.1");
 }
 
-export function toSiteAssetUrl(url?: string) {
-  if (!url) return "";
+function localCrmApiUrl() {
+  return normalizeCrmUrl(
+    process.env.NEXT_PUBLIC_LOCAL_CRM_API_URL || process.env.CRM_LOCAL_API_URL || LOCAL_CRM_API
+  );
+}
 
-  if (
-    url.startsWith("http://") ||
-    url.startsWith("https://")
-  ) {
-    return url;
+function serverCrmApiUrl() {
+  return normalizeCrmUrl(
+    process.env.CRM_SERVER_API_URL || process.env.NEXT_PUBLIC_SERVER_CRM_API_URL || HOSTED_CRM_API
+  );
+}
+
+export function crmApiUrl() {
+  return isDevelopment() ? localCrmApiUrl() : serverCrmApiUrl();
+}
+
+export function crmApiCandidates() {
+  if (isDevelopment()) {
+    return [...new Set([localCrmApiUrl(), serverCrmApiUrl()].filter(Boolean))];
   }
+  return [...new Set([serverCrmApiUrl()].filter(Boolean))];
+}
 
-  const baseUrl = crmApiCandidates()[0];
+const crmMediaPath = /^\/api\/v1\/(website-team\/photos|website-team\/member-photos|website-team\/employee-photos|website-projects\/media)\/([^/?#]+)$/;
 
-  if (!baseUrl) {
-    return url;
+function crmOrigins() {
+  return [...new Set(
+    [localCrmApiUrl(), serverCrmApiUrl(), LOCAL_CRM_API, HOSTED_CRM_API].map((url) => {
+      try { return new URL(url).origin; } catch { return ""; }
+    }).filter(Boolean)
+  )];
+}
+
+export function toSiteAssetUrl(url?: string | null) {
+  const trimmed = String(url || "").trim();
+  if (!trimmed) return "";
+  if (/res\.cloudinary\.com/i.test(trimmed)) return trimmed;
+  try {
+    const parsed = new URL(trimmed, "http://asset.local");
+    const match = parsed.pathname.match(crmMediaPath);
+    if (match) {
+      const isAbsolute = /^https?:\/\//i.test(trimmed);
+      const ours = !isAbsolute
+        || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)
+        || crmOrigins().includes(parsed.origin);
+      if (ours) {
+        if (!isDevelopment()) {
+          return `${serverCrmApiUrl()}/${match[1]}/${match[2]}`;
+        }
+        return `/api/media/${match[1]}/${match[2]}`;
+      }
+    }
+  } catch {
+    return trimmed;
   }
-
-  return `${baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+  return trimmed;
 }
