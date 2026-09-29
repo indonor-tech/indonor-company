@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { User } from "lucide-react";
+import { siteConfig } from "@/lib/site";
 
 export type TeamMember = {
   id: string;
@@ -47,7 +48,7 @@ export default function TeamGrid() {
     let cancelled = false;
     const load = async () => {
       try {
-        const response = await fetch("/api/team", { cache: "no-store" });
+        const response = await fetch(`${siteConfig.url}/website-team/public`, { cache: "no-store" });
         const result = await response.json().catch(() => ({ data: [] }));
         if (!response.ok || result.success === false) {
           throw new Error(result.message || "Could not load the team.");
