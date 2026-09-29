@@ -1,9 +1,16 @@
 const isDevelopment = process.env.NODE_ENV === "development";
-const localSiteUrl = process.env.NEXT_PUBLIC_LOCAL_SITE_URL || "http://localhost:3000";
+// const localSiteUrl = process.env.NEXT_PUBLIC_LOCAL_SITE_URL || "http://localhost:3000";
+const localSiteUrl = process.env.NEXT_PUBLIC_LOCAL_CRM_API_URL || "http://127.0.0.1:5000/api/v1";
+// const serverSiteUrl =
+//   process.env.NEXT_PUBLIC_SERVER_SITE_URL ||
+//   process.env.NEXT_PUBLIC_SITE_URL ||
+//   "https://indonortech.com";
+
+
 const serverSiteUrl =
-  process.env.NEXT_PUBLIC_SERVER_SITE_URL ||
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://indonortech.com";
+  process.env.NEXT_PUBLIC_SERVER_CRM_API_URL ||
+  process.env.CRM_SERVER_API_URL ||
+  "https://indonor-tech.onrender.com/api/v1";
 
 export const siteConfig = {
   name: "IndonorTech",
