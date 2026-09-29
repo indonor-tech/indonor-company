@@ -44,24 +44,79 @@ export default function TeamGrid() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   const load = async () => {
+  //     try {
+  //       const response = await fetch(`${siteConfig.url}/website-team/public`, { cache: "no-store" });
+  //       const result = await response.json().catch(() => ({ data: [] }));
+  //       if (!response.ok || result.success === false) {
+  //         throw new Error(result.message || "Could not load the team.");
+  //       }
+  //       if (!cancelled) setMembers(Array.isArray(result.data) ? result.data : []);
+  //     } catch (loadError) {
+  //       if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the team.");
+  //     } finally {
+  //       if (!cancelled) setLoading(false);
+  //     }
+  //   };
+  //   load();
+  //   return () => { cancelled = true; };
+  // }, []);
+
   useEffect(() => {
     let cancelled = false;
+  
     const load = async () => {
       try {
-        const response = await fetch(`${siteConfig.url}/website-team/public`, { cache: "no-store" });
-        const result = await response.json().catch(() => ({ data: [] }));
+        setLoading(true);
+        setError("");
+  
+        const response = await fetch(
+          "/api/team",
+          {
+            cache: "no-store",
+          }
+        );
+  
+        const result = await response.json().catch(() => ({
+          success: false,
+          data: [],
+        }));
+  
         if (!response.ok || result.success === false) {
-          throw new Error(result.message || "Could not load the team.");
+          throw new Error(
+            result.message || "Could not load the team."
+          );
         }
-        if (!cancelled) setMembers(Array.isArray(result.data) ? result.data : []);
+  
+        if (!cancelled) {
+          setMembers(
+            Array.isArray(result.data)
+              ? result.data
+              : []
+          );
+        }
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load the team.");
+        if (!cancelled) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Could not load the team."
+          );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
+  
     load();
-    return () => { cancelled = true; };
+  
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
