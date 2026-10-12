@@ -53,7 +53,8 @@ function GoogleCalendarCard() {
 }
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, is } = useAuth();
+  const canManagePassword = is('SUPER_ADMIN', 'ADMIN');
   return (
     <Stack spacing={3}>
       <Typography variant="h4">Settings</Typography>
@@ -66,13 +67,19 @@ export default function Settings() {
           <Typography color="text.secondary" sx={{ mt: 1.5 }}>{roleCopy[user?.role] || 'Access is limited to what your Admin assigned.'}</Typography>
         </CardContent>
       </Card>
-      <GoogleCalendarCard />
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Change password</Typography>
-          <ChangePasswordForm />
-        </CardContent>
-      </Card>
+      {canManagePassword && <GoogleCalendarCard />}
+      {canManagePassword ? (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2 }}>Change password</Typography>
+            <ChangePasswordForm />
+          </CardContent>
+        </Card>
+      ) : (
+        <Alert severity="info" variant="outlined">
+          Password changes are handled by an authorized administrator. Self-service reset is not available for your role.
+        </Alert>
+      )}
     </Stack>
   );
 }

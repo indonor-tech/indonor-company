@@ -5,10 +5,21 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { api, apiErrorMessage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { DEFAULT_EMPLOYEE_TAB_ACCESS, EMPLOYEE_PROFILE_TABS, tabAccessOf } from '../constants/employeeTabs';
+import { CRM_PAGE_KEYS } from '../constants/crm';
 
-const emptyForm = { name: '', email: '', password: '', role: 'EMPLOYEE', employeeId: '', isActive: true, tabAccess: { ...DEFAULT_EMPLOYEE_TAB_ACCESS } };
-const roleLabel = { SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', MANAGER: 'Manager', TEAM_LEAD: 'Team Lead', EMPLOYEE: 'Employee' };
+const emptyForm = { name: '', email: '', password: '', role: 'EMPLOYEE', employeeId: '', isActive: true, tabAccess: { ...DEFAULT_EMPLOYEE_TAB_ACCESS }, pageAccess: {} };
+const roleLabel = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Admin',
+  MANAGER: 'Manager / Sales Manager',
+  TEAM_LEAD: 'Team Lead',
+  EMPLOYEE: 'Employee',
+  BDA: 'BDA / Sales',
+  PROJECT_MANAGER: 'Project Manager',
+  VIEW_ADMIN: 'View Admin (read-only)'
+};
 const SELF_SERVICE_ROLES = ['EMPLOYEE', 'TEAM_LEAD'];
+const FINANCIAL_PAGES = new Set(['invoices', 'payments', 'financial_reports']);
 
 function employeeName(employee) {
   return [employee?.firstName, employee?.lastName].filter(Boolean).join(' ');
@@ -25,7 +36,9 @@ export default function Users() {
   const [editingId, setEditingId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const assignable = user?.role === 'SUPER_ADMIN' ? ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'] : ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
+  const assignable = user?.role === 'SUPER_ADMIN'
+    ? ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN']
+    : ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
   const users = useQuery({ queryKey: ['crm-users'], queryFn: () => api.get('/users').then((response) => response.data.data) });
   const employees = useQuery({
     queryKey: ['employees', 'user-link'],
@@ -35,7 +48,7 @@ export default function Users() {
   const rows = useMemo(() => users.data || [], [users.data]);
   const staff = useMemo(() => (Array.isArray(employees.data) ? employees.data : []).filter(Boolean), [employees.data]);
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload = {
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
@@ -45,17 +58,44 @@ export default function Users() {
       if (form.employeeId) payload.employeeId = form.employeeId;
       if (form.password.trim()) payload.password = form.password.trim();
       if (SELF_SERVICE_ROLES.includes(form.role)) payload.tabAccess = tabAccessOf(form.tabAccess);
-      return editingId ? api.patch(`/users/${editingId}`, payload) : api.post('/users', { ...payload, password: form.password.trim() });
+      const response = editingId
+        ? await api.patch(`/users/${editingId}`, payload)
+        : await api.post('/users', { ...payload, password: form.password.trim() });
+      const savedId = editingId || response.data.data.id;
+      if (form.role === 'VIEW_ADMIN' && can('crm:view-admin:manage')) {
+        const pages = CRM_PAGE_KEYS
+          .filter((page) => !(FINANCIAL_PAGES.has(page.key) && user?.role !== 'SUPER_ADMIN'))
+          .map((page) => ({ pageKey: page.key, canView: Boolean(form.pageAccess?.[page.key]) }));
+        await api.put(`/crm/view-admin/users/${savedId}/permissions`, { pages });
+      }
+      return response;
     },
     onSuccess: () => { client.invalidateQueries({ queryKey: ['crm-users'] }); setOpen(false); setShowPassword(false); }
   });
   const set = (name) => (event) => setForm((current) => ({ ...current, [name]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
-  const startCreate = () => { setEditingId(''); setShowPassword(false); setForm({ ...emptyForm, role: assignable.includes('EMPLOYEE') ? 'EMPLOYEE' : assignable[0], tabAccess: { ...DEFAULT_EMPLOYEE_TAB_ACCESS } }); setOpen(true); };
+  const startCreate = () => {
+    setEditingId('');
+    setShowPassword(false);
+    setForm({
+      ...emptyForm,
+      role: assignable.includes('EMPLOYEE') ? 'EMPLOYEE' : assignable[0],
+      tabAccess: { ...DEFAULT_EMPLOYEE_TAB_ACCESS },
+      pageAccess: {}
+    });
+    setOpen(true);
+  };
   const startEdit = (record) => {
     setEditingId(record.id);
     setShowPassword(false);
     setForm({
-      name: record.name || '', email: record.email || '', password: '', role: record.role, employeeId: record.employeeId ? String(record.employeeId) : '', isActive: record.isActive !== false, tabAccess: tabAccessOf(record.tabAccess)
+      name: record.name || '',
+      email: record.email || '',
+      password: '',
+      role: record.role,
+      employeeId: record.employeeId ? String(record.employeeId) : '',
+      isActive: record.isActive !== false,
+      tabAccess: tabAccessOf(record.tabAccess),
+      pageAccess: record.pageAccess || {}
     });
     setOpen(true);
   };
@@ -87,7 +127,7 @@ export default function Users() {
     <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={2}>
       <Box>
         <Typography variant="h4">CRM users</Typography>
-        <Typography color="text.secondary" sx={{ mt: 0.7 }}>Create logins for Admin, Manager, and Employee. Choose an employee name to fill their email, or type a new name.</Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.7 }}>Create logins including BDA, Project Manager, and read-only View Admin. Choose an employee name to fill their email, or type a new name.</Typography>
       </Box>
       {can('users:write') && <Button variant="contained" onClick={startCreate}>+ Add user</Button>}
     </Stack>
@@ -109,7 +149,7 @@ export default function Users() {
         </TableRow>)}</TableBody>
       </Table>}
     </CardContent></Card>
-    <Dialog open={open} onClose={closeDialog} fullWidth maxWidth={SELF_SERVICE_ROLES.includes(form.role) ? 'md' : 'sm'}>
+    <Dialog open={open} onClose={closeDialog} fullWidth maxWidth={SELF_SERVICE_ROLES.includes(form.role) || form.role === 'VIEW_ADMIN' ? 'md' : 'sm'}>
       <DialogTitle>{editingId ? 'Edit CRM user' : 'Add CRM user'}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -194,6 +234,46 @@ export default function Users() {
                   </ToggleButtonGroup>
                 </Stack>;
               })}
+            </Stack>
+          </Box>}
+          {form.role === 'VIEW_ADMIN' && <Box>
+            <Typography variant="subtitle2">View Admin page access</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Denied by default. Grant view-only pages explicitly. Write actions are always blocked. Financial pages stay Super Admin-only unless you are Super Admin.
+            </Typography>
+            <Stack spacing={2} sx={{ maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
+              {[...new Set(CRM_PAGE_KEYS.map((page) => page.section || 'Other'))].map((section) => (
+                <Box key={section}>
+                  <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>{section}</Typography>
+                  <Stack spacing={0.9}>
+                    {CRM_PAGE_KEYS.filter((page) => (page.section || 'Other') === section).map((page) => {
+                      const locked = FINANCIAL_PAGES.has(page.key) && user?.role !== 'SUPER_ADMIN';
+                      const enabled = Boolean(form.pageAccess?.[page.key]);
+                      return (
+                        <Stack key={page.key} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={1}>
+                          <Typography fontSize={13.5}>{page.label}</Typography>
+                          <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={enabled ? 'view' : 'none'}
+                            disabled={locked}
+                            onChange={(_event, next) => {
+                              if (!next) return;
+                              setForm((current) => ({
+                                ...current,
+                                pageAccess: { ...current.pageAccess, [page.key]: next === 'view' }
+                              }));
+                            }}
+                          >
+                            <ToggleButton value="none">No access</ToggleButton>
+                            <ToggleButton value="view">View</ToggleButton>
+                          </ToggleButtonGroup>
+                        </Stack>
+                      );
+                    })}
+                  </Stack>
+                </Box>
+              ))}
             </Stack>
           </Box>}
           {save.isError && <Alert severity="error">{apiErrorMessage(save.error, 'Could not save this CRM user.')}</Alert>}

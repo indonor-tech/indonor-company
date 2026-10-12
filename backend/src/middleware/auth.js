@@ -2,7 +2,9 @@ import jwt from 'jsonwebtoken';
 import User from '../modules/auth/user.model.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
-import { hasPermission, hasTabAccess } from '../modules/auth/roles.js';
+import { hasPermission, hasTabAccess, normalizeRole } from '../modules/auth/roles.js';
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export function isOwnEmployee(user, employeeId) {
   return Boolean(user?.employeeId && employeeId && String(user.employeeId) === String(employeeId));
@@ -18,6 +20,14 @@ export async function authenticate(req, _res, next) {
     const user = await User.findById(payload.sub);
     if (!user || !user.isActive) throw new AppError('Account is inactive or unavailable', 401);
     req.user = user;
+    // Global VIEW_ADMIN read-only enforcement (mark-as-read on notifications is allowed).
+    if (normalizeRole(user.role) === 'VIEW_ADMIN' && MUTATING_METHODS.has(req.method)) {
+      const url = String(req.originalUrl || '');
+      const allowMarkRead = req.method === 'PATCH' && (
+        /\/notifications\/[^/?]+\/read(?:\?|$)/.test(url) || /\/notifications\/read-all(?:\?|$)/.test(url)
+      );
+      if (!allowMarkRead) throw new AppError('VIEW_ADMIN accounts are read-only', 403);
+    }
     next();
   } catch (error) {
     next(error instanceof jwt.JsonWebTokenError ? new AppError('Invalid or expired token', 401) : error);

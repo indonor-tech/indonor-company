@@ -57,8 +57,25 @@ export default function Dashboard() {
   const chartData = (data?.byDepartment || []).map((item) => ({ name: item.name, employees: item.count }));
   const website = data?.website || {};
   const websiteToday = website.today || {};
+  const crm = data?.crm;
   return <Stack spacing={4}>
-    <Box><Typography variant="h4">Good morning, HR team</Typography><Typography color="text.secondary" sx={{ mt: .7 }}>Here’s what’s happening across your people operations and the IndonorTech website today.</Typography></Box>
+    <Box><Typography variant="h4">Operations dashboard</Typography><Typography color="text.secondary" sx={{ mt: .7 }}>CRM, recruitment, and website activity — metrics show unavailable when you lack access, not zero.</Typography></Box>
+    {crm && (
+      <Grid container spacing={2.5}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Leads" value={crm.leads} color={colors.teal} icon="◎" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Conversion rate" value={crm.conversionRate == null ? '—' : `${crm.conversionRate}%`} color={colors.blue} icon="◎" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Active clients" value={crm.clients} color={colors.purple} icon="✦" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Active projects" value={crm.activeProjects} color={colors.amber} icon="◷" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Overdue follow-ups" value={crm.overdueFollowUps} color={colors.amber} icon="!" /></Grid>
+        {crm.finance && (
+          <>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Invoiced" value={crm.finance.totalInvoiced} color={colors.teal} icon="₹" /></Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Received" value={crm.finance.totalPaid} color={colors.blue} icon="₹" /></Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Outstanding" value={crm.finance.outstanding} color={colors.purple} icon="₹" /></Grid>
+          </>
+        )}
+      </Grid>
+    )}
     <Grid container spacing={2.5}>
       <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Total employees" value={data?.totalEmployees} color={colors.teal} icon="◎" /></Grid>
       <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Active employees" value={(employees.ACTIVE || 0) + (employees.ON_PROBATION || 0)} color={colors.blue} icon="◎" /></Grid>

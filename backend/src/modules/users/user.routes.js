@@ -14,7 +14,7 @@ const createInput = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }).required(),
   password: Joi.string().min(8).max(72).required(),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE').required(),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN').required(),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)
@@ -23,7 +23,7 @@ const updateInput = Joi.object({
   name: Joi.string().trim().min(2).max(120),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }),
   password: Joi.string().min(8).max(72).allow(''),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)
@@ -60,6 +60,7 @@ router.post('/', authorize('users:write'), validate(createInput), asyncHandler(a
       role,
       permissions: permissionsForRole(role),
       tabAccess: SELF_SERVICE_ROLES.includes(role) ? normalizeTabAccess(role, req.body.tabAccess || DEFAULT_EMPLOYEE_TAB_ACCESS) : undefined,
+      pageAccess: role === 'VIEW_ADMIN' ? {} : undefined,
       employeeId: req.body.employeeId || null,
       isActive: req.body.isActive !== false,
       passwordHash: await User.hashPassword(req.body.password)
@@ -85,6 +86,11 @@ router.patch('/:id', authorize('users:write'), validate(updateInput), asyncHandl
   if (req.body.role) {
     user.role = nextRole;
     user.permissions = permissionsForRole(nextRole);
+    if (nextRole === 'VIEW_ADMIN' && !user.pageAccess) user.pageAccess = {};
+    if (nextRole !== 'VIEW_ADMIN' && user.pageAccess != null) {
+      user.pageAccess = undefined;
+      user.markModified('pageAccess');
+    }
   }
   if (SELF_SERVICE_ROLES.includes(nextRole)) {
     user.tabAccess = normalizeTabAccess(nextRole, req.body.tabAccess || user.tabAccess || DEFAULT_EMPLOYEE_TAB_ACCESS);

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, List, ListItemButton, ListItemIcon, ListItemText, Stack, Switch, TextField, Typography } from '@mui/material';
 import { api, apiErrorMessage, assetUrl } from '../services/api';
 import { countryOptions, stateOptions } from '../utils/geo';
+import { useAuth } from '../context/AuthContext';
 
 const emptyForm = {
   name: '', roles: [], bio: '', photoUrl: '', location: '', email: '', linkedinUrl: '', isPublished: true
@@ -25,6 +26,8 @@ function SelectOrType({ label, value, onChange, options, required, helperText })
 }
 
 export default function WebsiteTeam() {
+  const { can, isViewAdmin } = useAuth();
+  const canWrite = !isViewAdmin && (can('website:write') || can('catalog:create'));
   const client = useQueryClient();
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState('');
@@ -130,10 +133,12 @@ export default function WebsiteTeam() {
         <Typography variant="h4">Website team</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.7 }}>Add people from Employees, or enter someone by hand. Use the arrows to set the order visitors see on indonortech.com/team.</Typography>
       </Box>
-      <Stack direction="row" gap={1} flexWrap="wrap">
-        <Button variant="outlined" onClick={startPick}>Add from employees</Button>
-        <Button variant="contained" onClick={startCreate}>+ Add member</Button>
-      </Stack>
+      {canWrite && (
+        <Stack direction="row" gap={1} flexWrap="wrap">
+          <Button size="small" variant="outlined" onClick={startPick}>Add from employees</Button>
+          <Button size="small" variant="contained" onClick={startCreate}>+ Add member</Button>
+        </Stack>
+      )}
     </Stack>
     {members.isError && <Alert severity="error">{apiErrorMessage(members.error, 'Could not load the website team.')}</Alert>}
     {reorder.isError && <Alert severity="error">{apiErrorMessage(reorder.error, 'Could not update team order.')}</Alert>}
@@ -152,12 +157,14 @@ export default function WebsiteTeam() {
           </Stack>
           <Typography color="text.secondary">{formatRoles(member)}{member.location ? ` · ${member.location}` : ''}</Typography>
         </Box>
-        <Stack direction="row" gap={1} flexWrap="wrap">
-          <Button size="small" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)}>Move up</Button>
-          <Button size="small" disabled={index === rows.length - 1 || reorder.isPending} onClick={() => move(index, 1)}>Move down</Button>
-          <Button size="small" onClick={() => startEdit(member)}>Edit</Button>
-          <Button size="small" color="error" onClick={() => remove.mutate(member._id)}>Remove</Button>
-        </Stack>
+        {canWrite && (
+          <Stack direction="row" gap={1} flexWrap="wrap">
+            <Button size="small" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)}>Move up</Button>
+            <Button size="small" disabled={index === rows.length - 1 || reorder.isPending} onClick={() => move(index, 1)}>Move down</Button>
+            <Button size="small" onClick={() => startEdit(member)}>Edit</Button>
+            <Button size="small" color="error" onClick={() => remove.mutate(member._id)}>Remove</Button>
+          </Stack>
+        )}
       </Stack>
     </CardContent></Card>)}
     <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">

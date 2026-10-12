@@ -1,11 +1,14 @@
-export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
+export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
 
 export const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   MANAGER: 'Manager',
   TEAM_LEAD: 'Team Lead',
-  EMPLOYEE: 'Employee'
+  EMPLOYEE: 'Employee',
+  BDA: 'BDA / Sales',
+  PROJECT_MANAGER: 'Project Manager',
+  VIEW_ADMIN: 'View Admin'
 };
 
 export const SELF_SERVICE_ROLES = ['EMPLOYEE', 'TEAM_LEAD'];
@@ -26,11 +29,36 @@ const TASK_TEAM_LEAD_PERMISSIONS = ['task:create', 'task:read', 'task:read:team'
 
 const TASK_EMPLOYEE_PERMISSIONS = ['task:create', 'task:read'];
 
+/** Client & Project Management module — isolated permissions (finance is SUPER_ADMIN only). */
+export const CRM_MODULE_PERMISSIONS = [
+  'crm:leads:read', 'crm:leads:write', 'crm:leads:assign', 'crm:leads:convert',
+  'crm:clients:read', 'crm:clients:write',
+  'crm:projects:read', 'crm:projects:write', 'crm:projects:assign',
+  'crm:finance:read', 'crm:finance:write',
+  'crm:view-admin:manage'
+];
+
+const CRM_SALES_PERMISSIONS = [
+  'crm:leads:read', 'crm:leads:write', 'crm:leads:assign', 'crm:leads:convert',
+  'crm:clients:read', 'crm:clients:write',
+  'crm:projects:read'
+];
+
+const CRM_PM_PERMISSIONS = [
+  'crm:clients:read',
+  'crm:projects:read', 'crm:projects:write', 'crm:projects:assign'
+];
+
+const CRM_EMPLOYEE_PERMISSIONS = [
+  'crm:projects:read'
+];
+
 const LEGACY_ROLES = {
   HR_ADMIN: 'ADMIN',
   HR_MANAGER: 'MANAGER',
   RECRUITER: 'MANAGER',
-  VIEWER: 'EMPLOYEE'
+  VIEWER: 'EMPLOYEE',
+  SALES_MANAGER: 'MANAGER'
 };
 
 const ADMIN_PERMISSIONS = [
@@ -41,7 +69,11 @@ const ADMIN_PERMISSIONS = [
   'reports:read', 'analytics:read', 'website:read', 'website:write', 'audit:read',
   'catalog:read', 'catalog:create', 'users:read', 'users:write', 'email:send',
   'contact:read', 'contact:update',
-  ...TASK_PERMISSIONS
+  ...TASK_PERMISSIONS,
+  'crm:leads:read', 'crm:leads:write', 'crm:leads:assign', 'crm:leads:convert',
+  'crm:clients:read', 'crm:clients:write',
+  'crm:projects:read', 'crm:projects:write', 'crm:projects:assign',
+  'crm:view-admin:manage'
 ];
 
 const MANAGER_PERMISSIONS = [
@@ -50,15 +82,19 @@ const MANAGER_PERMISSIONS = [
   'interview:create', 'interview:read', 'interview:update',
   'documents:read', 'documents:upload',
   'reports:read', 'catalog:read', 'email:send', 'contact:read',
-  ...TASK_MANAGER_PERMISSIONS
+  ...TASK_MANAGER_PERMISSIONS,
+  ...CRM_SALES_PERMISSIONS
 ];
 
 export const ROLE_PERMISSIONS = {
-  SUPER_ADMIN: ADMIN_PERMISSIONS,
+  SUPER_ADMIN: [...ADMIN_PERMISSIONS, 'crm:finance:read', 'crm:finance:write'],
   ADMIN: ADMIN_PERMISSIONS,
   MANAGER: MANAGER_PERMISSIONS,
-  TEAM_LEAD: TASK_TEAM_LEAD_PERMISSIONS,
-  EMPLOYEE: TASK_EMPLOYEE_PERMISSIONS
+  TEAM_LEAD: [...TASK_TEAM_LEAD_PERMISSIONS, ...CRM_EMPLOYEE_PERMISSIONS],
+  EMPLOYEE: [...TASK_EMPLOYEE_PERMISSIONS, ...CRM_EMPLOYEE_PERMISSIONS],
+  BDA: CRM_SALES_PERMISSIONS,
+  PROJECT_MANAGER: CRM_PM_PERMISSIONS,
+  VIEW_ADMIN: []
 };
 
 export const EMPLOYEE_PROFILE_TABS = [
@@ -161,17 +197,72 @@ export function permissionsForRole(role) {
   return ROLE_PERMISSIONS[normalizeRole(role)] || [];
 }
 
+/**
+ * Maps read permissions → View Admin page keys (denied by default).
+ * Parent keys (e.g. tasks, leads) also satisfy related child reads.
+ */
+export const VIEW_ADMIN_READ_PAGES = {
+  'crm:leads:read': ['leads', 'sales_pipeline'],
+  'crm:clients:read': ['clients'],
+  'crm:projects:read': ['projects'],
+  'employee:read': ['employees', 'letters_offer', 'letters_agreement', 'letters_relieving', 'letters_company_card'],
+  'candidate:read': ['candidates', 'hiring_pipeline', 'letters_offer'],
+  'interview:read': ['interviews'],
+  'task:read': ['tasks'],
+  'task:read:all': ['tasks'],
+  'task:read:team': ['tasks'],
+  'task:reports:read': ['tasks'],
+  'task:audit:read': ['tasks'],
+  'contact:read': ['contact_submissions'],
+  'analytics:read': ['website_analytics'],
+  'website:read': ['website_team', 'website_projects'],
+  'catalog:read': ['catalogs'],
+  'reports:read': ['reports', 'dashboard'],
+  'email:send': ['email'],
+  'users:read': ['users']
+};
+
+function viewAdminHasPage(user, pageKeys = []) {
+  const access = user?.pageAccess || {};
+  return pageKeys.some((key) => (
+    access[key]
+    || (key === 'sales_pipeline' && access.leads)
+    || (key === 'hiring_pipeline' && access.candidates)
+    || (String(key).startsWith('tasks') && access.tasks)
+  ));
+}
+
+function isMutatingPermission(permission = '') {
+  return permission.includes(':write')
+    || permission.includes(':create')
+    || permission.includes(':update')
+    || permission.includes(':delete')
+    || permission.includes(':assign')
+    || permission.includes(':convert')
+    || permission.includes(':manage')
+    || permission.includes('finance')
+    || permission.includes(':upload');
+}
+
 export function hasPermission(user, permission) {
   if (!user) return false;
-  if (normalizeRole(user.role) === 'SUPER_ADMIN') return true;
+  const role = normalizeRole(user.role);
+  if (role === 'SUPER_ADMIN') return true;
+  if (role === 'VIEW_ADMIN') {
+    // Strictly read-only; page grants are stored on user.pageAccess as { [pageKey]: true }.
+    if (isMutatingPermission(permission)) return false;
+    const pageKeys = VIEW_ADMIN_READ_PAGES[permission];
+    if (!pageKeys) return false;
+    return viewAdminHasPage(user, pageKeys);
+  }
   if (permissionsForRole(user.role).includes(permission)) return true;
   return permissionsFromTabAccess(normalizeTabAccess(user.role, user.tabAccess)).includes(permission);
 }
 
 export function assignableRoles(actorRole) {
   const role = normalizeRole(actorRole);
-  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
-  if (role === 'ADMIN') return ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE'];
+  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
+  if (role === 'ADMIN') return ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
   return [];
 }
 
@@ -179,16 +270,27 @@ export function canManageRole(actorRole, targetRole) {
   return assignableRoles(actorRole).includes(normalizeRole(targetRole));
 }
 
-export function publicUser(user) {
+export function publicUser(user, extras = {}) {
   const role = normalizeRole(user.role);
   const tabAccess = normalizeTabAccess(role, user.tabAccess);
+  const pageAccess = extras.pageAccess || user.pageAccess || null;
+  let permissions;
+  if (role === 'SUPER_ADMIN') permissions = ['*'];
+  else if (role === 'VIEW_ADMIN') {
+    permissions = Object.entries(VIEW_ADMIN_READ_PAGES)
+      .filter(([, pageKeys]) => viewAdminHasPage({ pageAccess }, pageKeys))
+      .map(([permission]) => permission);
+  } else {
+    permissions = [...permissionsForRole(role), ...permissionsFromTabAccess(tabAccess)];
+  }
   return {
     id: String(user._id || user.id),
     name: user.name,
     email: user.email,
     role,
-    permissions: role === 'SUPER_ADMIN' ? ['*'] : [...permissionsForRole(role), ...permissionsFromTabAccess(tabAccess)],
+    permissions,
     tabAccess,
+    pageAccess,
     employeeId: user.employeeId || null,
     isActive: user.isActive !== false
   };

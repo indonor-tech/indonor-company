@@ -417,7 +417,9 @@ router.post('/:id/photo', profilePhotoUpload.single('photo'), asyncHandler(async
   const document = await saveProfilePhoto({ ownerType: 'Employee', ownerId: employee._id, file: req.file, userId: req.user._id });
   employee.profilePhotoUrl = `/api/v1/employees/${employee._id}/photo`;
   await employee.save();
-  return sendSuccess(res, { documentId: document._id }, 'Profile photo updated');
+  const { syncWebsiteTeamPhotoFromEmployee } = await import('../website-team/syncEmployeePhoto.js');
+  const websitePhotoUrl = await syncWebsiteTeamPhotoFromEmployee(employee);
+  return sendSuccess(res, { documentId: document._id, websitePhotoUrl }, 'Profile photo updated');
 }));
 
 export default router;

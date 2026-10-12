@@ -17,7 +17,10 @@ export default function Notifications() {
     queryFn: () => api.get('/notifications', { params }).then((response) => ({ rows: response.data.data, meta: response.data.meta })),
     placeholderData: keepPreviousData
   });
-  const refresh = () => client.invalidateQueries({ queryKey: ['notifications'] });
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ['notifications'] });
+    client.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+  };
   const markRead = useMutation({ mutationFn: (id) => api.patch(`/notifications/${id}/read`), onSuccess: refresh });
   const markAll = useMutation({ mutationFn: () => api.patch('/notifications/read-all'), onSuccess: refresh });
   const open = (item) => {
