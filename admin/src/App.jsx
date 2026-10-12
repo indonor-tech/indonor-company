@@ -34,6 +34,14 @@ const TaskReports = lazy(() => import('./pages/tasks/TaskReports'));
 const TaskAuditHistory = lazy(() => import('./pages/tasks/TaskAuditHistory'));
 const Corrections = lazy(() => import('./pages/tasks/Corrections'));
 const CalendarSetup = lazy(() => import('./pages/tasks/CalendarSetup'));
+const CrmLeads = lazy(() => import('./pages/crm/CrmLeads'));
+const CrmLeadDetail = lazy(() => import('./pages/crm/CrmLeadDetail'));
+const CrmClients = lazy(() => import('./pages/crm/CrmClients'));
+const CrmClientDetail = lazy(() => import('./pages/crm/CrmClientDetail'));
+const CrmProjects = lazy(() => import('./pages/crm/CrmProjects'));
+const CrmProjectDetail = lazy(() => import('./pages/crm/CrmProjectDetail'));
+const CrmFinance = lazy(() => import('./pages/crm/CrmFinance'));
+const CrmLeadBoard = lazy(() => import('./pages/crm/CrmLeadBoard'));
 
 function Protected() {
   const { user, loading } = useAuth();
@@ -42,8 +50,31 @@ function Protected() {
   return <Outlet />;
 }
 
-function Require({ permission, permissions, roles, children }) {
-  const { can, is } = useAuth();
+function viewAdminCanPage(user, pageKey) {
+  if (!pageKey || !user) return false;
+  const access = user.pageAccess || {};
+  if (access[pageKey]) return true;
+  if (pageKey === 'sales_pipeline' && access.leads) return true;
+  if (pageKey === 'hiring_pipeline' && access.candidates) return true;
+  if (pageKey === 'tasks' || String(pageKey).startsWith('tasks')) return Boolean(access.tasks);
+  return false;
+}
+
+function Require({ permission, permissions, roles, pageKey, children }) {
+  const { can, is, user } = useAuth();
+  if (user?.role === 'VIEW_ADMIN') {
+    if (pageKey === 'invoices' || (roles?.length === 1 && roles[0] === 'SUPER_ADMIN')) {
+      return <Navigate to="/" replace />;
+    }
+    if (pageKey) {
+      if (!viewAdminCanPage(user, pageKey)) return <Navigate to="/" replace />;
+    } else {
+      if (permission && !can(permission)) return <Navigate to="/" replace />;
+      if (permissions?.length && !permissions.some((item) => can(item))) return <Navigate to="/" replace />;
+      if (roles?.length && !roles.includes('VIEW_ADMIN')) return <Navigate to="/" replace />;
+    }
+    return <Suspense fallback={<Box sx={{ display: 'grid', placeItems: 'center', minHeight: 300 }}><CircularProgress /></Box>}>{children}</Suspense>;
+  }
   if (permission && !can(permission)) return <Navigate to="/" replace />;
   if (permissions?.length && !permissions.some((item) => can(item))) return <Navigate to="/" replace />;
   if (roles?.length && !is(...roles)) return <Navigate to="/" replace />;
@@ -58,39 +89,47 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="me" element={<MyProfile />} />
-          <Route path="users" element={<Require permission="users:read"><Users /></Require>} />
-          <Route path="employees" element={<Require permission="employee:read"><EntityPage type="employees" /></Require>} />
-          <Route path="employees/:id" element={<Require permission="employee:read"><Profile type="employees" /></Require>} />
-          <Route path="candidates" element={<Require permission="candidate:read"><EntityPage type="candidates" /></Require>} />
+          <Route path="users" element={<Require permission="users:read" pageKey="users"><Users /></Require>} />
+          <Route path="employees" element={<Require permission="employee:read" pageKey="employees"><EntityPage type="employees" /></Require>} />
+          <Route path="employees/:id" element={<Require permission="employee:read" pageKey="employees"><Profile type="employees" /></Require>} />
+          <Route path="candidates" element={<Require permission="candidate:read" pageKey="candidates"><EntityPage type="candidates" /></Require>} />
           <Route path="candidates/new" element={<Require permission="candidate:create"><CandidateIntake /></Require>} />
-          <Route path="candidates/:id" element={<Require permission="candidate:read"><Profile type="candidates" /></Require>} />
-          <Route path="pipeline" element={<Require permission="candidate:read"><Pipeline /></Require>} />
-          <Route path="interviews" element={<Require permission="interview:read"><Interviews /></Require>} />
-          <Route path="interviews/:id" element={<Require permission="interview:read"><InterviewDetail /></Require>} />
-          <Route path="contact-submissions" element={<Require permission="contact:read"><ContactSubmissions /></Require>} />
-          <Route path="website-analytics" element={<Require permission="analytics:read"><WebsiteAnalytics /></Require>} />
-          <Route path="website-team" element={<Require permission="website:read"><WebsiteTeam /></Require>} />
-          <Route path="website-projects" element={<Require permission="website:read"><WebsiteProjects /></Require>} />
-          <Route path="tasks" element={<Require permission="task:read"><TaskDashboard /></Require>} />
-          <Route path="tasks/my" element={<Require permission="task:read"><TaskList key="my" mode="my" /></Require>} />
-          <Route path="tasks/all" element={<Require permissions={['task:read:all', 'task:read:team']}><TaskList key="all" mode="all" /></Require>} />
-          <Route path="tasks/work-logs" element={<Require permission="task:read"><WorkLogs /></Require>} />
-          <Route path="tasks/calendar" element={<Require permission="task:read"><TaskCalendar /></Require>} />
-          <Route path="tasks/projects" element={<Require permission="task:read"><Projects /></Require>} />
-          <Route path="tasks/corrections" element={<Require permission="task:read"><Corrections /></Require>} />
-          <Route path="tasks/reports" element={<Require permission="task:reports:read"><TaskReports /></Require>} />
-          <Route path="tasks/audit" element={<Require permission="task:audit:read"><TaskAuditHistory /></Require>} />
-          <Route path="tasks/setup" element={<Require permission="task:calendar:manage"><CalendarSetup /></Require>} />
-          <Route path="tasks/:id" element={<Require permission="task:read"><TaskDetail /></Require>} />
+          <Route path="candidates/:id" element={<Require permission="candidate:read" pageKey="candidates"><Profile type="candidates" /></Require>} />
+          <Route path="pipeline" element={<Require permission="candidate:read" pageKey="hiring_pipeline"><Pipeline /></Require>} />
+          <Route path="interviews" element={<Require permission="interview:read" pageKey="interviews"><Interviews /></Require>} />
+          <Route path="interviews/:id" element={<Require permission="interview:read" pageKey="interviews"><InterviewDetail /></Require>} />
+          <Route path="contact-submissions" element={<Require permission="contact:read" pageKey="contact_submissions"><ContactSubmissions /></Require>} />
+          <Route path="website-analytics" element={<Require permission="analytics:read" pageKey="website_analytics"><WebsiteAnalytics /></Require>} />
+          <Route path="website-team" element={<Require permission="website:read" pageKey="website_team"><WebsiteTeam /></Require>} />
+          <Route path="website-projects" element={<Require permission="website:read" pageKey="website_projects"><WebsiteProjects /></Require>} />
+          <Route path="crm/leads" element={<Require permission="crm:leads:read" pageKey="leads"><CrmLeads /></Require>} />
+          <Route path="crm/pipeline" element={<Require permission="crm:leads:read" pageKey="sales_pipeline"><CrmLeadBoard /></Require>} />
+          <Route path="crm/leads/:id" element={<Require permission="crm:leads:read" pageKey="leads"><CrmLeadDetail /></Require>} />
+          <Route path="crm/clients" element={<Require permission="crm:clients:read" pageKey="clients"><CrmClients /></Require>} />
+          <Route path="crm/clients/:id" element={<Require permission="crm:clients:read" pageKey="clients"><CrmClientDetail /></Require>} />
+          <Route path="crm/projects" element={<Require permission="crm:projects:read" pageKey="projects"><CrmProjects /></Require>} />
+          <Route path="crm/projects/:id" element={<Require permission="crm:projects:read" pageKey="projects"><CrmProjectDetail /></Require>} />
+          <Route path="crm/finance" element={<Require permission="crm:finance:read" roles={['SUPER_ADMIN']} pageKey="invoices"><CrmFinance /></Require>} />
+          <Route path="tasks" element={<Require permission="task:read" pageKey="tasks"><TaskDashboard /></Require>} />
+          <Route path="tasks/my" element={<Require permission="task:read" pageKey="tasks"><TaskList key="my" mode="my" /></Require>} />
+          <Route path="tasks/all" element={<Require permissions={['task:read:all', 'task:read:team']} pageKey="tasks"><TaskList key="all" mode="all" /></Require>} />
+          <Route path="tasks/work-logs" element={<Require permission="task:read" pageKey="tasks"><WorkLogs /></Require>} />
+          <Route path="tasks/calendar" element={<Require permission="task:read" pageKey="tasks"><TaskCalendar /></Require>} />
+          <Route path="tasks/projects" element={<Require permission="task:read" pageKey="tasks"><Projects /></Require>} />
+          <Route path="tasks/corrections" element={<Require permission="task:read" pageKey="tasks"><Corrections /></Require>} />
+          <Route path="tasks/reports" element={<Require permission="task:reports:read" pageKey="tasks"><TaskReports /></Require>} />
+          <Route path="tasks/audit" element={<Require permission="task:audit:read" pageKey="tasks"><TaskAuditHistory /></Require>} />
+          <Route path="tasks/setup" element={<Require permission="task:calendar:manage" pageKey="tasks"><CalendarSetup /></Require>} />
+          <Route path="tasks/:id" element={<Require permission="task:read" pageKey="tasks"><TaskDetail /></Require>} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="email" element={<Require permission="email:send"><Email /></Require>} />
-          <Route path="letters/offer" element={<Require permissions={['employee:update', 'candidate:update']}><Letters kind="offer" /></Require>} />
-          <Route path="letters/agreement" element={<Require permission="employee:update"><Letters kind="agreement" /></Require>} />
-          <Route path="letters/relieving" element={<Require permission="employee:update"><Letters kind="relieving" /></Require>} />
-          <Route path="letters/company-card" element={<Require permission="employee:update"><Letters kind="company-card" /></Require>} />
-          <Route path="catalogs" element={<Require permission="catalog:read"><Catalogs /></Require>} />
-          <Route path="reports" element={<Require permission="reports:read"><Reports /></Require>} />
-          <Route path="settings" element={<Require roles={['SUPER_ADMIN', 'ADMIN']}><Settings /></Require>} />
+          <Route path="email" element={<Require permission="email:send" pageKey="email"><Email /></Require>} />
+          <Route path="letters/offer" element={<Require permissions={['employee:update', 'candidate:update']} pageKey="letters_offer"><Letters kind="offer" /></Require>} />
+          <Route path="letters/agreement" element={<Require permission="employee:update" pageKey="letters_agreement"><Letters kind="agreement" /></Require>} />
+          <Route path="letters/relieving" element={<Require permission="employee:update" pageKey="letters_relieving"><Letters kind="relieving" /></Require>} />
+          <Route path="letters/company-card" element={<Require permission="employee:update" pageKey="letters_company_card"><Letters kind="company-card" /></Require>} />
+          <Route path="catalogs" element={<Require permission="catalog:read" pageKey="catalogs"><Catalogs /></Require>} />
+          <Route path="reports" element={<Require permission="reports:read" pageKey="reports"><Reports /></Require>} />
+          <Route path="settings" element={<Require roles={['SUPER_ADMIN', 'ADMIN']} pageKey="settings"><Settings /></Require>} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Alert, Autocomplete, Box, Button, Card, CardContent, Chip, CircularProgress, FormControlLabel, MenuItem, Stack, Switch, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField, Tooltip, Typography } from '@mui/material';
 import { api, apiErrorMessage } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const ACTIVE_STATUSES = ['ACTIVE', 'ON_PROBATION', 'ON_LEAVE'];
 const STATUS_COLOR = { SENT: 'success', PARTIAL: 'warning', FAILED: 'error' };
@@ -112,9 +113,10 @@ function History() {
 }
 
 export default function Email() {
+  const { isViewAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState('compose');
+  const [tab, setTab] = useState(() => (isViewAdmin ? 'history' : 'compose'));
   const [to, setTo] = useState(() => normalize((searchParams.get('to') || '').split(',')));
   const [cc, setCc] = useState([]);
   const [bcc, setBcc] = useState([]);
@@ -166,23 +168,27 @@ export default function Email() {
     onError: (error) => setNotice({ severity: 'error', text: apiErrorMessage(error, 'Email could not be sent.') })
   });
 
-  const submit = (event) => { event.preventDefault(); setNotice(null); send.mutate(); };
-  const canSend = status.data?.configured && to.length > 0 && !invalid.length && subject.trim() && body.trim() && totalRecipients <= 100 && !send.isPending;
+  const submit = (event) => { event.preventDefault(); if (isViewAdmin) return; setNotice(null); send.mutate(); };
+  const canSend = !isViewAdmin && status.data?.configured && to.length > 0 && !invalid.length && subject.trim() && body.trim() && totalRecipients <= 100 && !send.isPending;
 
   return <Stack spacing={3}>
     <Box>
       <Typography variant="h4">Email</Typography>
-      <Typography color="text.secondary" sx={{ mt: .7 }}>Send emails to employees and CRM users from the company Gmail account.</Typography>
+      <Typography color="text.secondary" sx={{ mt: .7 }}>
+        {isViewAdmin ? 'View sent email history. Sending is restricted for View Admin accounts.' : 'Send emails to employees and CRM users from the company Gmail account.'}
+      </Typography>
     </Box>
-    <MailStatus status={status} onVerify={() => { setNotice(null); verify.mutate(); }} onTest={() => { setNotice(null); test.mutate(); }} verifying={verify.isPending} testing={test.isPending} />
+    {!isViewAdmin && (
+      <MailStatus status={status} onVerify={() => { setNotice(null); verify.mutate(); }} onTest={() => { setNotice(null); test.mutate(); }} verifying={verify.isPending} testing={test.isPending} />
+    )}
     {notice && <Alert severity={notice.severity} onClose={() => setNotice(null)} sx={{ whiteSpace: 'pre-line' }}>{notice.text}</Alert>}
     <Card>
       <Tabs value={tab} onChange={(_event, value) => setTab(value)} sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab value="compose" label="Compose" />
+        {!isViewAdmin && <Tab value="compose" label="Compose" />}
         <Tab value="history" label="Sent history" />
       </Tabs>
       <CardContent>
-        {tab === 'history' ? <History /> : <Stack component="form" onSubmit={submit} spacing={2.5}>
+        {tab === 'history' || isViewAdmin ? <History /> : <Stack component="form" onSubmit={submit} spacing={2.5}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
             <Button variant="outlined" size="small" disabled={!activeEmployees.length} onClick={() => addRecipients(activeEmployees.map((recipient) => recipient.email))}>
               Add all active employees ({activeEmployees.length})

@@ -33,9 +33,11 @@ import taskProjectRoutes from './modules/tasks/routes/project.routes.js';
 import taskCalendarRoutes from './modules/tasks/routes/calendar.routes.js';
 import taskAuditRoutes from './modules/tasks/routes/taskAudit.routes.js';
 import taskReportRoutes, { dashboardRouter as taskDashboardRoutes } from './modules/tasks/routes/taskReport.routes.js';
+import crmRoutes from './modules/crm/routes/index.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { startNotificationJobs } from './jobs/notifications.job.js';
 import { startTaskJobs } from './jobs/tasks.job.js';
+import { startCrmReminderJobs } from './jobs/crmReminders.job.js';
 
 export const app = express();
 app.set('trust proxy', 1);
@@ -87,6 +89,7 @@ app.use(`${api}/task-calendar`, taskCalendarRoutes);
 app.use(`${api}/task-audit`, taskAuditRoutes);
 app.use(`${api}/task-reports`, taskReportRoutes);
 app.use(`${api}/task-dashboard`, taskDashboardRoutes);
+app.use(`${api}/crm`, crmRoutes);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup({
   openapi: '3.0.0', info: { title: 'Indonor HR CRM API', version: '1.0.0' },
   servers: [{ url: `${env.activeAppUrl}/api/v1` }],
@@ -126,6 +129,7 @@ if (process.env.NODE_ENV !== 'test') {
   connectDatabase().then(() => {
     startNotificationJobs();
     startTaskJobs();
+    startCrmReminderJobs();
     app.listen(env.port, '0.0.0.0', () => {
       process.stdout.write(`HR CRM API listening on ${env.port} (${env.nodeEnv})\n`);
       console.log('[CRM] Backend startup completed');

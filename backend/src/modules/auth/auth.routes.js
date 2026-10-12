@@ -60,32 +60,15 @@ router.post('/logout', authenticate, asyncHandler(async (req, res) => {
 }));
 
 router.get('/me', authenticate, (req, res) => sendSuccess(res, publicUser(req.user), 'Current user'));
-router.post('/forgot-password', asyncHandler(async (req, res) => {
-  const email = String(req.body.email || '').toLowerCase();
-  const user = await User.findOne({ email });
-  if (user) {
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.resetTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    await user.save();
-    if (env.nodeEnv !== 'production') res.set('X-Development-Reset-Token', resetToken);
-  }
-  return sendSuccess(res, null, 'If that email exists, reset instructions have been sent');
+router.post('/forgot-password', asyncHandler(async (_req, res) => {
+  return sendSuccess(res, null, 'Password changes are handled by an authorized administrator. Self-service reset is not available.');
 }));
-router.post('/reset-password', asyncHandler(async (req, res) => {
-  const schema = Joi.object({ token: Joi.string().required(), newPassword: Joi.string().min(8).required() });
-  const { error, value } = schema.validate(req.body);
-  if (error) throw new AppError('Validation failed', 422, error.details);
-  const hash = crypto.createHash('sha256').update(value.token).digest('hex');
-  const user = await User.findOne({ resetTokenHash: hash, resetTokenExpiresAt: { $gt: new Date() } }).select('+passwordHash');
-  if (!user) throw new AppError('Reset token is invalid or expired', 400);
-  user.passwordHash = await User.hashPassword(value.newPassword); user.resetTokenHash = undefined; user.resetTokenExpiresAt = undefined; user.refreshTokenHash = undefined;
-  await user.save();
-  return sendSuccess(res, null, 'Password reset successfully');
+router.post('/reset-password', asyncHandler(async (_req, _res) => {
+  throw new AppError('Self-service password reset is disabled. Ask an authorized administrator to set a new password.', 403);
 }));
 router.post('/change-password', authenticate, asyncHandler(async (req, res) => {
   const role = normalizeRole(req.user.role);
-  if (role === 'EMPLOYEE' || role === 'TEAM_LEAD' || role === 'MANAGER') {
+  if (role === 'EMPLOYEE' || role === 'TEAM_LEAD' || role === 'MANAGER' || role === 'VIEW_ADMIN' || role === 'BDA' || role === 'PROJECT_MANAGER') {
     throw new AppError('Ask an Admin to update your password. You cannot change your CRM password or role.', 403);
   }
   const schema = Joi.object({ currentPassword: Joi.string().required(), newPassword: Joi.string().min(8).max(72).required() });

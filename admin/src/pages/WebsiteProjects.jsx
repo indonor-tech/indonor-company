@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
 import { api, apiErrorMessage, assetUrl } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const emptyForm = {
   title: '', client: '', summary: '', detailsText: '', url: '', tagsText: '',
@@ -26,6 +27,8 @@ function payloadFromForm(form) {
 }
 
 export default function WebsiteProjects() {
+  const { can, isViewAdmin } = useAuth();
+  const canWrite = !isViewAdmin && (can('website:write') || can('catalog:create'));
   const client = useQueryClient();
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState('');
@@ -92,7 +95,7 @@ export default function WebsiteProjects() {
         <Typography variant="h4">Website projects</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.7 }}>Projects shown on indonortech.com and the homepage. Upload a Cloudinary demo video or paste a YouTube / Vimeo link. Use the arrows for the public order.</Typography>
       </Box>
-      <Button variant="contained" onClick={startCreate}>+ Add project</Button>
+      {canWrite && <Button size="small" variant="contained" onClick={startCreate}>+ Add project</Button>}
     </Stack>
     {projects.isError && <Alert severity="error">{apiErrorMessage(projects.error, 'Could not load website projects.')}</Alert>}
     {reorder.isError && <Alert severity="error">{apiErrorMessage(reorder.error, 'Could not update project order.')}</Alert>}
@@ -113,12 +116,14 @@ export default function WebsiteProjects() {
           </Stack>
           <Typography color="text.secondary">{project.client}{project.url ? ` · ${project.url}` : ''}</Typography>
         </Box>
-        <Stack direction="row" gap={1} flexWrap="wrap">
-          <Button size="small" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)}>Move up</Button>
-          <Button size="small" disabled={index === rows.length - 1 || reorder.isPending} onClick={() => move(index, 1)}>Move down</Button>
-          <Button size="small" onClick={() => startEdit(project)}>Edit</Button>
-          <Button size="small" color="error" onClick={() => remove.mutate(project._id)}>Remove</Button>
-        </Stack>
+        {canWrite && (
+          <Stack direction="row" gap={1} flexWrap="wrap">
+            <Button size="small" disabled={index === 0 || reorder.isPending} onClick={() => move(index, -1)}>Move up</Button>
+            <Button size="small" disabled={index === rows.length - 1 || reorder.isPending} onClick={() => move(index, 1)}>Move down</Button>
+            <Button size="small" onClick={() => startEdit(project)}>Edit</Button>
+            <Button size="small" color="error" onClick={() => remove.mutate(project._id)}>Remove</Button>
+          </Stack>
+        )}
       </Stack>
     </CardContent></Card>)}
     <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">

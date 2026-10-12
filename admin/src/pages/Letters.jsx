@@ -79,13 +79,16 @@ const emptyForm = {
 };
 
 export default function Letters({ kind }) {
-  const { can } = useAuth();
+  const { can, isViewAdmin } = useAuth();
   const client = useQueryClient();
   const [params, setParams] = useSearchParams();
   const copy = LETTERS[kind];
-  const canEmployees = can('employee:update');
+  const canGenerateEmployee = can('employee:update');
+  const canGenerateCandidate = kind === 'offer' && can('candidate:update');
+  const canGenerate = !isViewAdmin && (canGenerateEmployee || canGenerateCandidate);
+  const canEmployees = canGenerateEmployee || can('employee:read');
   const isCard = kind === 'company-card';
-  const canCandidates = kind === 'offer' && can('candidate:update');
+  const canCandidates = kind === 'offer' && (canGenerateCandidate || can('candidate:read'));
   const requestedId = { employee: params.get('employeeId') || '', candidate: params.get('candidateId') || '' };
   const [sourceState, setSourceState] = useState(requestedId.candidate ? 'candidate' : 'employee');
   const source = canEmployees && canCandidates ? sourceState : canEmployees ? 'employee' : 'candidate';
@@ -220,7 +223,7 @@ export default function Letters({ kind }) {
       <BoxTitle copy={copy} />
       <Card>
         <CardContent>
-          <Stack spacing={2.5} component="form" onSubmit={(event) => { event.preventDefault(); generate.mutate(); }}>
+          <Stack spacing={2.5} component="form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) generate.mutate(); }}>
             {canEmployees && canCandidates && (
               <ToggleButtonGroup exclusive value={source} onChange={setSource} size="small">
                 <ToggleButton value="employee">Working employee</ToggleButton>
@@ -361,9 +364,13 @@ export default function Letters({ kind }) {
             )}
             {generate.isError && <Alert severity="error">{apiErrorMessage(generate.error, isCard ? 'Could not generate the company card.' : `Could not generate the ${kind} letter.`)}</Alert>}
             {generate.isSuccess && <Alert severity="success">{copy.success} Open it from Documents if the PDF did not appear.</Alert>}
-            <Button type="submit" variant="contained" size="large" disabled={generate.isPending || missing} sx={{ alignSelf: 'flex-start' }}>
-              {generate.isPending ? 'Generating…' : isCard ? 'Generate card' : 'Generate PDF'}
-            </Button>
+            {!canGenerate ? (
+              <Alert severity="info" variant="outlined">View only — letter generation requires an authorized editor.</Alert>
+            ) : (
+              <Button type="submit" variant="contained" size="large" disabled={generate.isPending || missing} sx={{ alignSelf: 'flex-start' }}>
+                {generate.isPending ? 'Generating…' : isCard ? 'Generate card' : 'Generate PDF'}
+              </Button>
+            )}
           </Stack>
         </CardContent>
       </Card>
