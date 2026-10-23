@@ -16,6 +16,7 @@ const roleLabel = {
   EMPLOYEE: 'Employee',
   BDA: 'BDA / Sales',
   PROJECT_MANAGER: 'Project Manager',
+  FINANCE: 'Finance',
   VIEW_ADMIN: 'View Admin (read-only)'
 };
 const SELF_SERVICE_ROLES = ['EMPLOYEE', 'TEAM_LEAD'];
@@ -37,7 +38,7 @@ export default function Users() {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const assignable = user?.role === 'SUPER_ADMIN'
-    ? ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN']
+    ? ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN']
     : ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
   const users = useQuery({ queryKey: ['crm-users'], queryFn: () => api.get('/users').then((response) => response.data.data) });
   const employees = useQuery({

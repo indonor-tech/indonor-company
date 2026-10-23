@@ -4,7 +4,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { api, apiErrorMessage } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { FOLLOW_UP_TYPES, SALES_PIPELINE_STATUSES, labelize } from '../../constants/crm';
+import { FOLLOW_UP_TYPES, SALES_PIPELINE_STATUSES, emptyLead, labelize, money } from '../../constants/crm';
+import LeadFormFields, { leadPayload } from './LeadFormFields';
+
+function dateInput(value) {
+  return value ? String(value).slice(0, 10) : '';
+}
 
 export default function CrmLeadDetail() {
   const { id } = useParams();
@@ -12,8 +17,11 @@ export default function CrmLeadDetail() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const [note, setNote] = useState('');
+  const [callNote, setCallNote] = useState('');
   const [convertOpen, setConvertOpen] = useState(false);
   const [followOpen, setFollowOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState(emptyLead());
   const [followForm, setFollowForm] = useState({
     nextFollowUpDate: '', nextFollowUpTime: '11:30', followUpType: 'CALL', followUpNote: '', reminderPreference: '30_MINUTES_BEFORE'
   });
@@ -33,17 +41,12 @@ export default function CrmLeadDetail() {
     mutationFn: () => api.post(`/crm/leads/${id}/notes`, { note }),
     onSuccess: () => { setNote(''); client.invalidateQueries({ queryKey: ['crm-lead', id] }); }
   });
+  const addCall = useMutation({
+    mutationFn: () => api.post(`/crm/leads/${id}/calls`, { notes: callNote }),
+    onSuccess: () => { setCallNote(''); client.invalidateQueries({ queryKey: ['crm-lead', id] }); }
+  });
   const schedule = useMutation({
-    mutationFn: () => {
-      const reminderDateTime = followForm.nextFollowUpDate
-        ? new Date(`${followForm.nextFollowUpDate}T${followForm.nextFollowUpTime || '09:00'}:00`)
-        : null;
-      if (reminderDateTime) reminderDateTime.setMinutes(reminderDateTime.getMinutes() - 30);
-      return api.post(`/crm/leads/${id}/follow-ups`, {
-        ...followForm,
-        reminderDateTime: reminderDateTime?.toISOString() || null
-      });
-    },
+    mutationFn: () => api.post(`/crm/leads/${id}/follow-ups`, followForm),
     onSuccess: () => {
       setFollowOpen(false);
       client.invalidateQueries({ queryKey: ['crm-lead', id] });
@@ -58,9 +61,38 @@ export default function CrmLeadDetail() {
       navigate(`/crm/clients/${response.data.data.client._id}`);
     }
   });
+  const saveLead = useMutation({
+    mutationFn: () => api.patch(`/crm/leads/${id}`, leadPayload(form)),
+    onSuccess: () => {
+      setEditOpen(false);
+      client.invalidateQueries({ queryKey: ['crm-lead', id] });
+    }
+  });
+  const upload = useMutation({
+    mutationFn: (file) => {
+      const data = new FormData();
+      data.append('files', file);
+      return api.post(`/crm/leads/${id}/attachments`, data);
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['crm-lead', id] })
+  });
 
   if (leadQuery.isLoading) return <Typography>Loading lead…</Typography>;
   if (leadQuery.isError || !lead) return <Alert severity="error">Lead not found.</Alert>;
+
+  const openEdit = () => {
+    setForm({
+      ...emptyLead(),
+      ...lead,
+      expectedStartDate: dateInput(lead.expectedStartDate),
+      deadline: dateInput(lead.deadline),
+      assignedTo: lead.assignedTo?._id || lead.assignedTo || '',
+      quotedAmount: lead.quotedAmount ?? lead.expectedDealValue ?? '',
+      estimatedBudget: lead.estimatedBudget ?? '',
+      requiredTechnologies: lead.requiredTechnologies || []
+    });
+    setEditOpen(true);
+  };
 
   return (
     <Stack spacing={3}>
@@ -72,22 +104,37 @@ export default function CrmLeadDetail() {
         </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Chip label={labelize(lead.status)} color={lead.status === 'WON' || lead.status === 'CONVERTED' ? 'success' : 'default'} />
-          {!readOnly && lead.status !== 'WON' && lead.status !== 'CONVERTED' && can('crm:leads:convert') && (
+          {!readOnly && <Button variant="outlined" onClick={openEdit}>Edit</Button>}
+          {!readOnly && !lead.clientId && can('crm:leads:convert') && (
             <Button variant="contained" onClick={() => setConvertOpen(true)}>Convert to client</Button>
           )}
           {!readOnly && <Button variant="outlined" onClick={() => setFollowOpen(true)}>Schedule follow-up</Button>}
         </Stack>
       </Box>
 
+      {lead.overdueAlert && <Alert severity="error">This lead has an overdue follow-up or outstanding payment.</Alert>}
+
       <Card>
         <CardContent>
           <Stack spacing={2}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               <TextField label="Contact" value={lead.contactPersonName || '—'} InputProps={{ readOnly: true }} fullWidth />
+              <TextField label="Designation" value={lead.designation || '—'} InputProps={{ readOnly: true }} fullWidth />
               <TextField label="Email" value={lead.email || '—'} InputProps={{ readOnly: true }} fullWidth />
-              <TextField label="Phone" value={lead.phone || '—'} InputProps={{ readOnly: true }} fullWidth />
             </Stack>
-            <TextField label="Requirement" value={lead.requirementDescription || '—'} InputProps={{ readOnly: true }} fullWidth multiline minRows={2} />
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <TextField label="Phone" value={lead.phone || '—'} InputProps={{ readOnly: true }} fullWidth />
+              <TextField label="WhatsApp" value={lead.whatsappNumber || '—'} InputProps={{ readOnly: true }} fullWidth />
+              <TextField label="Country" value={lead.country || '—'} InputProps={{ readOnly: true }} fullWidth />
+            </Stack>
+            <TextField label="Address" value={[lead.address, lead.city, lead.state, lead.country].filter(Boolean).join(', ') || '—'} InputProps={{ readOnly: true }} fullWidth />
+            <TextField label="Project description" value={lead.projectDescription || '—'} InputProps={{ readOnly: true }} fullWidth multiline minRows={2} />
+            <TextField label="Business requirements" value={lead.businessRequirements || lead.requirementDescription || '—'} InputProps={{ readOnly: true }} fullWidth multiline minRows={2} />
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <TextField label="Quoted amount" value={money(lead.quotedAmount, lead.currency)} InputProps={{ readOnly: true }} fullWidth />
+              <TextField label="Technologies" value={(lead.requiredTechnologies || []).join(', ') || '—'} InputProps={{ readOnly: true }} fullWidth />
+              <TextField label="Owner" value={lead.assignedTo?.name || '—'} InputProps={{ readOnly: true }} fullWidth />
+            </Stack>
             {!readOnly && (
               <TextField select label="Status" value={lead.status === 'CONVERTED' ? 'WON' : lead.status} onChange={(e) => saveStatus.mutate(e.target.value)} disabled={lead.status === 'WON' || lead.status === 'CONVERTED' || saveStatus.isPending} sx={{ maxWidth: 280 }}>
                 {SALES_PIPELINE_STATUSES.map((item) => <MenuItem key={item} value={item} disabled={item === 'WON'}>{labelize(item)}</MenuItem>)}
@@ -95,10 +142,37 @@ export default function CrmLeadDetail() {
             )}
             {lead.clientId && (
               <Alert severity="success" action={<Button size="small" onClick={() => navigate(`/crm/clients/${lead.clientId._id || lead.clientId}`)}>Open client</Button>}>
-                Converted to {lead.clientId.clientId || 'client'} — lead history is preserved.
+                Converted to {lead.clientId.clientId || 'client'} on {lead.convertedDate ? new Date(lead.convertedDate).toLocaleString() : '—'} — original Lead ID {lead.leadId} is preserved.
               </Alert>
             )}
           </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6">Attachments</Typography>
+            {!readOnly && (
+              <Button size="small" component="label">
+                Upload
+                <input hidden type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])} />
+              </Button>
+            )}
+          </Box>
+          {(lead.attachments || []).length === 0 ? <Typography color="text.secondary">No files yet.</Typography>
+            : <Stack spacing={1}>{(lead.attachments || []).map((file) => (
+              <Button key={file._id} size="small" sx={{ justifyContent: 'flex-start' }} onClick={() => {
+                api.get(`/crm/files/lead/${lead._id}/${file._id}`, { responseType: 'blob' }).then((response) => {
+                  const url = URL.createObjectURL(response.data);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = file.name || 'attachment';
+                  link.click();
+                  URL.revokeObjectURL(url);
+                });
+              }}>{file.name}</Button>
+            ))}</Stack>}
         </CardContent>
       </Card>
 
@@ -117,11 +191,17 @@ export default function CrmLeadDetail() {
 
       <Card>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Activity timeline</Typography>
+          <Typography variant="h6" sx={{ mb: 2 }}>Activity & call history</Typography>
           {!readOnly && (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
-              <TextField size="small" placeholder="Add a note…" value={note} onChange={(e) => setNote(e.target.value)} fullWidth />
-              <Button variant="outlined" disabled={!note.trim() || addNote.isPending} onClick={() => addNote.mutate()}>Add note</Button>
+            <Stack spacing={1} sx={{ mb: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <TextField size="small" placeholder="Add a note…" value={note} onChange={(e) => setNote(e.target.value)} fullWidth />
+                <Button variant="outlined" disabled={!note.trim() || addNote.isPending} onClick={() => addNote.mutate()}>Add note</Button>
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <TextField size="small" placeholder="Log a call or meeting…" value={callNote} onChange={(e) => setCallNote(e.target.value)} fullWidth />
+                <Button variant="outlined" disabled={!callNote.trim() || addCall.isPending} onClick={() => addCall.mutate()}>Log call</Button>
+              </Stack>
             </Stack>
           )}
           <Stack spacing={1.5} divider={<Divider />}>
@@ -138,6 +218,18 @@ export default function CrmLeadDetail() {
           </Stack>
         </CardContent>
       </Card>
+
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Edit lead</DialogTitle>
+        <DialogContent dividers>
+          <LeadFormFields form={form} setForm={setForm} showFollowUp={false} />
+          {saveLead.isError && <Alert severity="error" sx={{ mt: 2 }}>{apiErrorMessage(saveLead.error)}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={!form.leadName?.trim() || saveLead.isPending} onClick={() => saveLead.mutate()}>Save</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={followOpen} onClose={() => setFollowOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Schedule follow-up</DialogTitle>
@@ -161,7 +253,7 @@ export default function CrmLeadDetail() {
       <Dialog open={convertOpen} onClose={() => setConvertOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Convert lead to client</DialogTitle>
         <DialogContent dividers>
-          <Typography sx={{ mb: 2 }}>Create a client from this lead. The original lead and its history will remain available.</Typography>
+          <Typography sx={{ mb: 2 }}>Create a client from this lead without re-entering data. The original Lead ID is preserved and a unique Client ID is generated. A first project is created from the opportunity details.</Typography>
           {convert.isError && <Alert severity="error">{apiErrorMessage(convert.error)}</Alert>}
         </DialogContent>
         <DialogActions>

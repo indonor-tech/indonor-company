@@ -109,7 +109,7 @@ export default function App() {
           <Route path="crm/clients/:id" element={<Require permission="crm:clients:read" pageKey="clients"><CrmClientDetail /></Require>} />
           <Route path="crm/projects" element={<Require permission="crm:projects:read" pageKey="projects"><CrmProjects /></Require>} />
           <Route path="crm/projects/:id" element={<Require permission="crm:projects:read" pageKey="projects"><CrmProjectDetail /></Require>} />
-          <Route path="crm/finance" element={<Require permission="crm:finance:read" roles={['SUPER_ADMIN']} pageKey="invoices"><CrmFinance /></Require>} />
+          <Route path="crm/finance" element={<Require permission="crm:finance:read" pageKey="invoices"><CrmFinance /></Require>} />
           <Route path="tasks" element={<Require permission="task:read" pageKey="tasks"><TaskDashboard /></Require>} />
           <Route path="tasks/my" element={<Require permission="task:read" pageKey="tasks"><TaskList key="my" mode="my" /></Require>} />
           <Route path="tasks/all" element={<Require permissions={['task:read:all', 'task:read:team']} pageKey="tasks"><TaskList key="all" mode="all" /></Require>} />

@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true, select: false },
     role: {
       type: String,
-      enum: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'RECRUITER', 'VIEWER'],
+      enum: ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'RECRUITER', 'VIEWER'],
       default: 'EMPLOYEE'
     },
     permissions: [{ type: String }],

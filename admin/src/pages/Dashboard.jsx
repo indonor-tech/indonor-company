@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { money } from '../constants/crm';
 
 const colors = { teal: '#0f766e', amber: '#f59e0b', purple: '#7c3aed', blue: '#2563eb' };
 function Metric({ icon, label, value, color }) { return <Card sx={{ height: '100%' }}><CardContent><Stack direction="row" justifyContent="space-between" alignItems="flex-start"><Box><Typography color="text.secondary" variant="body2">{label}</Typography><Typography variant="h4" sx={{ mt: 1 }}>{value ?? 0}</Typography></Box><Box sx={{ p: 1.2, borderRadius: 2, bgcolor: `${color}18`, color }}>{icon}</Box></Stack></CardContent></Card>; }
@@ -69,9 +70,23 @@ export default function Dashboard() {
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Overdue follow-ups" value={crm.overdueFollowUps} color={colors.amber} icon="!" /></Grid>
         {crm.finance && (
           <>
-            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Invoiced" value={crm.finance.totalInvoiced} color={colors.teal} icon="₹" /></Grid>
-            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Received" value={crm.finance.totalPaid} color={colors.blue} icon="₹" /></Grid>
-            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Outstanding" value={crm.finance.outstanding} color={colors.purple} icon="₹" /></Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Invoiced" value={money(crm.finance.totalInvoiced)} color={colors.teal} icon="₹" /></Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Received" value={money(crm.finance.totalPaid)} color={colors.blue} icon="₹" /></Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Outstanding" value={money(crm.finance.outstanding)} color={colors.purple} icon="₹" /></Grid>
+            {crm.finance.partnership && (
+              <>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="My share entitlement" value={money(crm.finance.partnership.companyEntitlement)} color={colors.teal} icon="₹" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="My share received" value={money(crm.finance.partnership.companyReceived)} color={colors.blue} icon="₹" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="My share remaining" value={money(crm.finance.partnership.companyRemaining)} color={colors.purple} icon="₹" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Partner settlements due" value={money(crm.finance.partnership.partnerOutstanding)} color={colors.amber} icon="₹" /></Grid>
+              </>
+            )}
+            {crm.finance.partnerDues && (
+              <>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Partner remaining payable" value={money(crm.finance.partnerDues.remainingPayable)} color={colors.amber} icon="₹" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}><Metric label="Partner remaining receivable" value={money(crm.finance.partnerDues.remainingReceivable)} color={colors.purple} icon="₹" /></Grid>
+              </>
+            )}
           </>
         )}
       </Grid>
