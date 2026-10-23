@@ -1,4 +1,4 @@
-export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
+export const CRM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN'];
 
 export const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
@@ -8,6 +8,7 @@ export const ROLE_LABELS = {
   EMPLOYEE: 'Employee',
   BDA: 'BDA / Sales',
   PROJECT_MANAGER: 'Project Manager',
+  FINANCE: 'Finance',
   VIEW_ADMIN: 'View Admin'
 };
 
@@ -53,6 +54,13 @@ const CRM_EMPLOYEE_PERMISSIONS = [
   'crm:projects:read'
 ];
 
+const CRM_FINANCE_PERMISSIONS = [
+  'crm:leads:read',
+  'crm:clients:read',
+  'crm:projects:read',
+  'crm:finance:read', 'crm:finance:write'
+];
+
 const LEGACY_ROLES = {
   HR_ADMIN: 'ADMIN',
   HR_MANAGER: 'MANAGER',
@@ -94,6 +102,7 @@ export const ROLE_PERMISSIONS = {
   EMPLOYEE: [...TASK_EMPLOYEE_PERMISSIONS, ...CRM_EMPLOYEE_PERMISSIONS],
   BDA: CRM_SALES_PERMISSIONS,
   PROJECT_MANAGER: CRM_PM_PERMISSIONS,
+  FINANCE: CRM_FINANCE_PERMISSIONS,
   VIEW_ADMIN: []
 };
 
@@ -261,7 +270,7 @@ export function hasPermission(user, permission) {
 
 export function assignableRoles(actorRole) {
   const role = normalizeRole(actorRole);
-  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
+  if (role === 'SUPER_ADMIN') return ['ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN'];
   if (role === 'ADMIN') return ['MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'];
   return [];
 }

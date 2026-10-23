@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import { api, apiErrorMessage } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { PROJECT_STATUSES, PROJECT_TYPES, labelize } from '../../constants/crm';
+import { PROJECT_STATUSES, PROJECT_TYPES, TECH_STACK, labelize } from '../../constants/crm';
 
 export default function CrmProjects() {
   const { can, isViewAdmin } = useAuth();
@@ -15,7 +15,9 @@ export default function CrmProjects() {
   const [status, setStatus] = useState('');
   const [open, setOpen] = useState(Boolean(params.get('clientId')));
   const [form, setForm] = useState({
-    projectName: '', clientId: params.get('clientId') || '', projectType: 'WEBSITE', status: 'PLANNED', projectDescription: ''
+    projectName: '', clientId: params.get('clientId') || '', projectType: 'WEBSITE', status: 'NOT_STARTED',
+    projectDescription: '', scope: '', technologyStack: [], estimatedStartDate: '', expectedEndDate: '',
+    estimatedDuration: '', contractValue: '', currency: 'INR'
   });
   const readOnly = isViewAdmin || !can('crm:projects:write');
 
@@ -29,7 +31,16 @@ export default function CrmProjects() {
     queryFn: () => api.get('/crm/projects', { params: { q: search || undefined, status: status || undefined, limit: 100 } }).then((r) => r.data)
   });
   const create = useMutation({
-    mutationFn: () => api.post('/crm/projects', form),
+    mutationFn: () => {
+      const payload = {
+        ...form,
+        contractValue: form.contractValue === '' ? undefined : Number(form.contractValue),
+        finalAmount: form.contractValue === '' ? undefined : Number(form.contractValue)
+      };
+      if (!payload.estimatedStartDate) delete payload.estimatedStartDate;
+      if (!payload.expectedEndDate) delete payload.expectedEndDate;
+      return api.post('/crm/projects', payload);
+    },
     onSuccess: (response) => {
       client.invalidateQueries({ queryKey: ['crm-projects'] });
       setOpen(false);
@@ -71,6 +82,7 @@ export default function CrmProjects() {
                         <TableCell>Client</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Status</TableCell>
+                        <TableCell>Progress</TableCell>
                         <TableCell align="right">Open</TableCell>
                       </TableRow>
                     </TableHead>
@@ -83,7 +95,10 @@ export default function CrmProjects() {
                           </TableCell>
                           <TableCell>{row.clientId?.clientName || row.clientId?.companyName || '—'}</TableCell>
                           <TableCell>{labelize(row.projectType) || '—'}</TableCell>
-                          <TableCell><Chip size="small" label={labelize(row.status)} /></TableCell>
+                          <TableCell>
+                            <Chip size="small" color={row.isOverdue ? 'error' : 'default'} label={row.isOverdue ? `${labelize(row.status)} · overdue` : labelize(row.status)} />
+                          </TableCell>
+                          <TableCell>{row.progressPercent ?? 0}%</TableCell>
                           <TableCell align="right"><Button size="small" onClick={() => navigate(`/crm/projects/${row._id}`)}>View</Button></TableCell>
                         </TableRow>
                       ))}
@@ -110,6 +125,17 @@ export default function CrmProjects() {
               </TextField>
             </Stack>
             <TextField label="Description" value={form.projectDescription} onChange={(e) => setForm({ ...form, projectDescription: e.target.value })} fullWidth multiline minRows={3} />
+            <TextField label="Scope" value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })} fullWidth multiline minRows={2} />
+            <Autocomplete multiple freeSolo options={TECH_STACK} value={form.technologyStack} onChange={(_e, value) => setForm({ ...form, technologyStack: value })} renderInput={(params) => <TextField {...params} label="Technologies" />} />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField type="date" label="Start date" InputLabelProps={{ shrink: true }} value={form.estimatedStartDate} onChange={(e) => setForm({ ...form, estimatedStartDate: e.target.value })} fullWidth />
+              <TextField type="date" label="Deadline" InputLabelProps={{ shrink: true }} value={form.expectedEndDate} onChange={(e) => setForm({ ...form, expectedEndDate: e.target.value })} fullWidth />
+              <TextField label="Duration" value={form.estimatedDuration} onChange={(e) => setForm({ ...form, estimatedDuration: e.target.value })} fullWidth />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField label="Contract / bid amount" type="number" value={form.contractValue} onChange={(e) => setForm({ ...form, contractValue: e.target.value })} fullWidth />
+              <TextField label="Currency" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} fullWidth />
+            </Stack>
             {create.isError && <Alert severity="error">{apiErrorMessage(create.error)}</Alert>}
           </Stack>
         </DialogContent>

@@ -26,15 +26,14 @@ const navigation = [
       { label: 'Clients', path: '/crm/clients', icon: <BusinessOutlined />, permission: 'crm:clients:read', pageKey: 'clients' }
     ]
   },
-  // {
-  //   label: 'Projects',
-  //   icon: <FolderOutlined />,
-  //   section: 'Projects',
-  //   children: [
-  //     { label: 'Client projects', path: '/crm/projects', icon: <FolderOutlined />, permission: 'crm:projects:read', pageKey: 'projects' },
-  //     { label: 'Task projects', path: '/tasks/projects', icon: <FolderOutlined />, permission: 'task:read', pageKey: 'tasks' }
-  //   ]
-  // },
+  {
+    label: 'Projects',
+    icon: <FolderOutlined />,
+    section: 'Projects',
+    children: [
+      { label: 'Client projects', path: '/crm/projects', icon: <FolderOutlined />, permission: 'crm:projects:read', pageKey: 'projects' }
+    ]
+  },
   {
     label: 'Tasks & Follow-ups',
     icon: <TaskAltOutlined />,
@@ -51,7 +50,7 @@ const navigation = [
       { label: 'Calendar setup', path: '/tasks/setup', icon: <EditCalendarOutlined />, permission: 'task:calendar:manage', pageKey: 'tasks' }
     ]
   },
-  { label: 'Invoices & Payments', path: '/crm/finance', icon: <PaymentsOutlined />, section: 'Finance', permission: 'crm:finance:read', roles: ['SUPER_ADMIN'], pageKey: 'invoices' },
+  { label: 'Invoices & Payments', path: '/crm/finance', icon: <PaymentsOutlined />, section: 'Finance', permission: 'crm:finance:read', pageKey: 'invoices' },
   {
     label: 'Recruitment & HR',
     icon: <HowToRegOutlined />,

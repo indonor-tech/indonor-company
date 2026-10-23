@@ -4,6 +4,9 @@ import Candidate from '../recruitment/candidate.model.js';
 import Interview from '../interviews/interview.model.js';
 import { websiteAnalyticsSummary } from '../analytics/website-analytics.routes.js';
 import { CrmClient, CrmInvoice, CrmLead, CrmPayment, CrmProject, FollowUp } from '../crm/crm.models.js';
+import { computePartnershipSettlement } from '../crm/crm.partnership.js';
+import { summarizePartnerDues } from '../crm/crm.dues.js';
+import { moneyAmount } from '../crm/crm.helpers.js';
 import { authenticate, authorize } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/response.js';
@@ -47,7 +50,7 @@ router.get('/', authenticate, asyncHandler(async (req, res) => {
   const active = { isDeleted: false };
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const canCrm = hasPermission(req.user, 'crm:leads:read');
-  const canFinance = hasPermission(req.user, 'crm:finance:read') && normalizeRole(req.user.role) === 'SUPER_ADMIN';
+  const canFinance = hasPermission(req.user, 'crm:finance:read');
   const [employeeStats, candidateStats, interviewStats, interviewResults, byDepartment, byType, website, crmBundle] = await Promise.all([
     Employee.aggregate([{ $match: active }, { $group: { _id: '$employmentStatus', count: { $sum: 1 } } }]),
     Candidate.aggregate([{ $match: active }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
@@ -60,17 +63,39 @@ router.get('/', authenticate, asyncHandler(async (req, res) => {
       CrmLead.countDocuments({ isDeleted: false, isArchived: { $ne: true } }),
       CrmLead.countDocuments({ isDeleted: false, status: { $in: ['WON', 'CONVERTED'] } }),
       CrmClient.countDocuments({ isDeleted: false }),
-      CrmProject.countDocuments({ isDeleted: false, status: 'ACTIVE' }),
+      CrmProject.countDocuments({ isDeleted: false, status: { $in: ['ACTIVE', 'IN_PROGRESS'] } }),
       FollowUp.countDocuments({ isDeleted: false, status: 'PENDING', nextFollowUpDate: { $lt: start } }),
       canFinance ? CrmInvoice.aggregate([
         { $match: { isDeleted: false, status: { $nin: ['CANCELLED', 'DRAFT'] } } },
         { $group: { _id: null, invoiced: { $sum: '$totalAmount' }, paid: { $sum: '$amountPaid' } } }
       ]) : Promise.resolve([]),
       canFinance ? CrmPayment.aggregate([
-        { $match: { isDeleted: false } },
+        { $match: { isDeleted: false, $or: [{ status: 'CONFIRMED' }, { status: { $exists: false } }, { status: null }] } },
         { $group: { _id: null, received: { $sum: '$amount' } } }
-      ]) : Promise.resolve([])
-    ]).then(([leads, won, clients, activeProjects, overdueFollowUps, invoiceAgg, paymentAgg]) => ({
+      ]) : Promise.resolve([]),
+      canFinance ? CrmProject.aggregate([
+        { $match: { isDeleted: false } },
+        { $group: { _id: null, outstanding: { $sum: '$outstanding' }, overdue: { $sum: { $cond: [{ $and: [{ $gt: ['$outstanding', 0] }, { $lt: ['$nextPaymentDueDate', start] }] }, '$outstanding', 0] } } } }
+      ]) : Promise.resolve([]),
+      canFinance ? CrmProject.find({ isDeleted: false }).lean() : Promise.resolve([])
+    ]).then(async ([leads, won, clients, activeProjects, overdueFollowUps, invoiceAgg, paymentAgg, projectAgg, financeProjects]) => {
+      const partnership = {
+        companyEntitlement: 0, companyInvoiced: 0, companyReceived: 0, companyRemaining: 0,
+        partnerOutstanding: 0, referralDue: 0, expenses: 0, profit: 0
+      };
+      for (const project of financeProjects || []) {
+        const row = await computePartnershipSettlement(project);
+        partnership.companyEntitlement += row.company.entitlement;
+        partnership.companyInvoiced += row.company.invoiced;
+        partnership.companyReceived += row.company.received;
+        partnership.companyRemaining += row.company.remaining;
+        partnership.partnerOutstanding += row.partners.reduce((sum, partner) => sum + partner.outstanding, 0);
+        partnership.referralDue += row.referral.outstanding;
+        partnership.expenses += row.expenses;
+        partnership.profit += row.profit;
+      }
+      Object.keys(partnership).forEach((key) => { partnership[key] = moneyAmount(partnership[key]); });
+      return {
       leads,
       won,
       conversionRate: leads ? Number(((won / leads) * 100).toFixed(1)) : null,
@@ -80,9 +105,13 @@ router.get('/', authenticate, asyncHandler(async (req, res) => {
       finance: canFinance ? {
         totalInvoiced: invoiceAgg[0]?.invoiced ?? 0,
         totalPaid: invoiceAgg[0]?.paid ?? paymentAgg[0]?.received ?? 0,
-        outstanding: Math.max(0, (invoiceAgg[0]?.invoiced ?? 0) - (invoiceAgg[0]?.paid ?? 0))
+        outstanding: projectAgg[0]?.outstanding ?? Math.max(0, (invoiceAgg[0]?.invoiced ?? 0) - (invoiceAgg[0]?.paid ?? 0)),
+        overduePayments: projectAgg[0]?.overdue ?? 0,
+        partnership,
+        partnerDues: await summarizePartnerDues()
       } : null
-    })) : Promise.resolve(null)
+    };
+    }) : Promise.resolve(null)
   ]);
   const groupToObject = (rows) => Object.fromEntries(rows.map((row) => [row._id || 'UNKNOWN', row.count]));
   return sendSuccess(res, {

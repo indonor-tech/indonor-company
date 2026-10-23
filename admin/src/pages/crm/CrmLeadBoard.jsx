@@ -7,20 +7,26 @@ import {
 } from '@mui/material';
 import { api, apiErrorMessage } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { SALES_PIPELINE_STATUSES, labelize } from '../../constants/crm';
+import { SALES_PIPELINE_STATUSES, labelize, money } from '../../constants/crm';
 
 export default function CrmLeadBoard() {
   const { can, isViewAdmin } = useAuth();
   const navigate = useNavigate();
   const client = useQueryClient();
   const [search, setSearch] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
   const [error, setError] = useState('');
   const [activeStage, setActiveStage] = useState('NEW');
   const readOnly = isViewAdmin || !can('crm:leads:write');
 
   const board = useQuery({
-    queryKey: ['crm-lead-board', search],
-    queryFn: () => api.get('/crm/leads/board', { params: { q: search || undefined } }).then((r) => r.data.data)
+    queryKey: ['crm-lead-board', search, assignedTo],
+    queryFn: () => api.get('/crm/leads/board', { params: { q: search || undefined, assignedTo: assignedTo || undefined } }).then((r) => r.data.data)
+  });
+  const sales = useQuery({
+    queryKey: ['crm-directory', 'sales'],
+    queryFn: () => api.get('/crm/directory', { params: { kind: 'sales' } }).then((r) => r.data.data),
+    retry: false
   });
 
   const move = useMutation({
@@ -64,13 +70,22 @@ export default function CrmLeadBoard() {
         </Stack>
       </Box>
 
-      <TextField
-        size="small"
-        placeholder="Search pipeline…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        sx={{ maxWidth: 320 }}
-      />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+        <TextField
+          size="small"
+          placeholder="Search pipeline…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ maxWidth: 320 }}
+        />
+        <TextField select size="small" label="Salesperson" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} sx={{ minWidth: 200 }}>
+          <MenuItem value="">All owners</MenuItem>
+          {(sales.data || []).map((user) => <MenuItem key={user.id} value={user.id}>{user.name}</MenuItem>)}
+        </TextField>
+      </Stack>
+      {(board.data?.overdueAlerts || []).length > 0 && (
+        <Alert severity="warning">{board.data.overdueAlerts.length} lead(s) have overdue follow-ups or payments.</Alert>
+      )}
       {error && <Alert severity="error">{error}</Alert>}
       {board.isError && <Alert severity="error">Could not load sales board.</Alert>}
 
@@ -160,9 +175,14 @@ export default function CrmLeadBoard() {
                   }}
                 >
                   <Box sx={{ minWidth: 0, cursor: 'pointer' }} onClick={() => navigate(`/crm/leads/${lead._id}`)}>
-                    <Typography fontWeight={650} noWrap>{lead.leadName}</Typography>
+                    <Typography fontWeight={650} noWrap>{lead.leadName} {lead.overdueAlert ? '· overdue' : ''}</Typography>
                     <Typography variant="caption" color="text.secondary" display="block" noWrap>
-                      {lead.companyName || lead.leadId} · {lead.assignedTo?.name || 'Unassigned'}
+                      {lead.leadId} · {lead.assignedTo?.name || 'Unassigned'} · {money(lead.quotedAmount, lead.currency)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                      Next: {lead.nextFollowUp?.nextFollowUpDate ? new Date(lead.nextFollowUp.nextFollowUpDate).toLocaleDateString() : '—'}
+                      {lead.projectStatus ? ` · Project ${labelize(lead.projectStatus)}` : ''}
+                      {lead.outstandingPayment ? ` · Outstanding ${money(lead.outstandingPayment, lead.currency)}` : ''}
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">

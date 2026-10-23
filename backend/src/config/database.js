@@ -3,6 +3,7 @@ import dns from 'node:dns';
 import { env } from './env.js';
 import { migrateCrmRoles } from '../database/migrate-roles.js';
 import { migrateCrmLeadStatuses } from '../database/migrate-crm-leads.js';
+import { migrateCrmSchema } from '../database/migrate-crm-schema.js';
 
 export async function connectDatabase() {
   mongoose.set('strictQuery', true);
@@ -11,6 +12,9 @@ export async function connectDatabase() {
   await migrateCrmRoles();
   await migrateCrmLeadStatuses().catch((error) => {
     process.stderr.write(`[CRM] Lead status migration skipped: ${error.message}\n`);
+  });
+  await migrateCrmSchema().catch((error) => {
+    process.stderr.write(`[CRM] Schema migration skipped: ${error.message}\n`);
   });
 }
 

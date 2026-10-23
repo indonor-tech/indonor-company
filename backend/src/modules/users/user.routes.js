@@ -14,7 +14,7 @@ const createInput = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }).required(),
   password: Joi.string().min(8).max(72).required(),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN').required(),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN').required(),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)
@@ -23,7 +23,7 @@ const updateInput = Joi.object({
   name: Joi.string().trim().min(2).max(120),
   email: Joi.string().trim().lowercase().email({ tlds: { allow: false } }),
   password: Joi.string().min(8).max(72).allow(''),
-  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'VIEW_ADMIN'),
+  role: Joi.string().valid('ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'BDA', 'PROJECT_MANAGER', 'FINANCE', 'VIEW_ADMIN'),
   employeeId: objectId,
   isActive: Joi.boolean(),
   tabAccess: Joi.object().unknown(true)

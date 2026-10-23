@@ -6,16 +6,20 @@ import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { AppError } from '../../../utils/errors.js';
 import { pagination, sendSuccess } from '../../../utils/response.js';
 import {
-  FOLLOW_UP_TYPES, LEAD_PRIORITIES, LEAD_SOURCES, LEAD_STATUSES, PROJECT_TYPES,
-  SALES_PIPELINE_STATUSES, SERVICE_TYPES, isWonStatus, normalizeLeadStatus
+  CONVERTIBLE_LEAD_STATUSES, CURRENCIES, FOLLOW_UP_TYPES, LEAD_PRIORITIES, LEAD_SOURCES, LEAD_STATUSES,
+  PROJECT_TYPES, SALES_PIPELINE_STATUSES, SERVICE_TYPES,
+  isWonStatus, normalizeLeadStatus
 } from '../constants.js';
 import {
-  ClientActivity, ClientContact, CrmClient, CrmLead, FollowUp, LeadActivity
+  CrmLead, CrmProject, FollowUp, LeadActivity
 } from '../crm.models.js';
 import {
-  computeReminderDateTime, escapeRegex, findLeadDuplicates, isSuperAdmin,
-  nextCrmId, notifyUser, pageParams, writeCrmAudit
+  applyQuotedAmount, canAccessFinancial, computeReminderDateTime, contractValueOf,
+  escapeRegex, findLeadDuplicates, moneyAmount, nextCrmId, notifyUser, pageParams,
+  quotedAmountOf, writeCrmAudit
 } from '../crm.helpers.js';
+import { convertLeadToClient } from '../crm.convert.js';
+import { crmUpload, storeCrmFile } from '../crm.files.js';
 import { rejectViewAdminMutations, requireCrmPage } from '../middleware/crmAccess.js';
 import { normalizeRole } from '../../auth/roles.js';
 
@@ -31,6 +35,7 @@ const leadBody = Joi.object({
   country: Joi.string().trim().max(80).allow(''),
   state: Joi.string().trim().max(80).allow(''),
   city: Joi.string().trim().max(80).allow(''),
+  district: Joi.string().trim().max(80).allow(''),
   address: Joi.string().trim().max(500).allow(''),
   postalCode: Joi.string().trim().max(20).allow(''),
   phoneCountryCode: Joi.string().trim().max(8).allow(''),
@@ -47,21 +52,32 @@ const leadBody = Joi.object({
   referralDetails: Joi.string().trim().max(1000).allow(''),
   interestedService: Joi.string().valid(...SERVICE_TYPES, ''),
   requirementDescription: Joi.string().trim().max(5000).allow(''),
+  projectDescription: Joi.string().trim().max(8000).allow(''),
+  businessRequirements: Joi.string().trim().max(8000).allow(''),
   expectedProjectType: Joi.string().valid(...PROJECT_TYPES, ''),
+  requiredTechnologies: Joi.array().items(Joi.string().trim().max(80)),
   expectedStartDate: Joi.date().iso().allow(null),
+  estimatedDuration: Joi.string().trim().max(80).allow(''),
+  deadline: Joi.date().iso().allow(null),
   estimatedBudget: Joi.number().min(0).allow(null),
   expectedDealValue: Joi.number().min(0).allow(null),
-  currency: Joi.string().trim().max(8),
+  quotedAmount: Joi.number().min(0).allow(null),
+  currency: Joi.string().trim().uppercase().valid(...CURRENCIES),
   urgency: Joi.string().valid('LOW', 'NORMAL', 'HIGH', 'CRITICAL', ''),
   probability: Joi.number().min(0).max(100),
   isDecisionMaker: Joi.boolean(),
+  notes: Joi.string().trim().max(8000).allow(''),
   tags: Joi.array().items(Joi.string().trim().max(60)),
   customFields: Joi.object().unknown(true),
   timezone: Joi.string().trim().max(80).allow(''),
   priority: Joi.string().valid(...LEAD_PRIORITIES),
   status: Joi.string().valid(...LEAD_STATUSES),
   assignedTo: objectId,
-  forceCreate: Joi.boolean()
+  forceCreate: Joi.boolean(),
+  nextFollowUpDate: Joi.date().iso().allow(null),
+  nextFollowUpTime: Joi.string().trim().max(20).allow(''),
+  followUpType: Joi.string().valid(...FOLLOW_UP_TYPES),
+  followUpNote: Joi.string().trim().max(4000).allow('')
 });
 
 const followUpBody = Joi.object({
@@ -85,9 +101,65 @@ async function addLeadActivity(leadId, type, title, actor, description = '', res
 
 function leadScopeFilter(user) {
   const role = normalizeRole(user.role);
-  if (['SUPER_ADMIN', 'ADMIN', 'MANAGER'].includes(role)) return {};
+  if (['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'FINANCE'].includes(role)) return {};
   if (role === 'BDA') return { assignedTo: user._id };
   return { assignedTo: user._id };
+}
+
+function presentLead(lead, user) {
+  const copy = { ...lead };
+  copy.quotedAmount = quotedAmountOf(copy);
+  copy.isConverted = Boolean(lead.clientId);
+  copy.convertedDate = lead.convertedDate || null;
+  if (!canAccessFinancial(user)) {
+    // Sales still need quoted/budget figures; hide only unrelated financial internals.
+  }
+  return copy;
+}
+
+async function enrichLeads(leads) {
+  const ids = leads.map((lead) => lead._id);
+  const clientIds = leads.map((lead) => lead.clientId?._id || lead.clientId).filter(Boolean);
+  const [followUps, projects] = await Promise.all([
+    FollowUp.find({ leadId: { $in: ids }, isDeleted: false, status: 'PENDING' })
+      .sort({ nextFollowUpDate: 1 }).lean(),
+    clientIds.length
+      ? CrmProject.find({ clientId: { $in: clientIds }, isDeleted: false })
+        .select('clientId status expectedEndDate outstanding contractValue finalAmount confirmedReceived nextPaymentDueDate projectId projectName')
+        .lean()
+      : Promise.resolve([])
+  ]);
+  const followByLead = new Map();
+  const now = new Date();
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  for (const followUp of followUps) {
+    const key = String(followUp.leadId);
+    if (!followByLead.has(key)) followByLead.set(key, followUp);
+  }
+  const projectsByClient = new Map();
+  for (const project of projects) {
+    const key = String(project.clientId);
+    const list = projectsByClient.get(key) || [];
+    list.push(project);
+    projectsByClient.set(key, list);
+  }
+  return leads.map((lead) => {
+    const nextFollowUp = followByLead.get(String(lead._id)) || null;
+    const clientProjects = projectsByClient.get(String(lead.clientId?._id || lead.clientId)) || [];
+    const outstanding = moneyAmount(clientProjects.reduce((sum, project) => sum + moneyAmount(project.outstanding ?? Math.max(0, contractValueOf(project) - moneyAmount(project.confirmedReceived))), 0));
+    const overduePayment = clientProjects.some((project) => project.nextPaymentDueDate && new Date(project.nextPaymentDueDate) < start && moneyAmount(project.outstanding) > 0);
+    const projectStatus = clientProjects[0]?.status || null;
+    return {
+      ...lead,
+      quotedAmount: quotedAmountOf(lead),
+      nextFollowUp,
+      followUpOverdue: Boolean(nextFollowUp && new Date(nextFollowUp.nextFollowUpDate) < start),
+      projectStatus,
+      outstandingPayment: outstanding,
+      overduePayment,
+      overdueAlert: Boolean((nextFollowUp && new Date(nextFollowUp.nextFollowUpDate) < start) || overduePayment)
+    };
+  });
 }
 
 router.use(authenticate, rejectViewAdminMutations, requireCrmPage('leads'));
@@ -96,7 +168,8 @@ router.get('/dashboard', authorize('crm:leads:read'), asyncHandler(async (req, r
   const base = { isDeleted: false, isArchived: { $ne: true }, ...leadScopeFilter(req.user) };
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);
-  const [total, byStatus, todayFollowUps, overdueFollowUps] = await Promise.all([
+  const assignedClientFilter = normalizeRole(req.user.role) === 'BDA' ? { assignedTo: req.user._id } : {};
+  const [total, byStatus, todayFollowUps, overdueFollowUps, paymentFollowUps, dueProjects] = await Promise.all([
     CrmLead.countDocuments(base),
     CrmLead.aggregate([{ $match: base }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     FollowUp.find({
@@ -107,7 +180,19 @@ router.get('/dashboard', authorize('crm:leads:read'), asyncHandler(async (req, r
     FollowUp.find({
       isDeleted: false, status: 'PENDING', nextFollowUpDate: { $lt: start },
       ...(normalizeRole(req.user.role) === 'BDA' ? { assignedSalesPerson: req.user._id } : {})
-    }).populate('leadId', 'leadName companyName leadId').sort({ nextFollowUpDate: 1 }).limit(50).lean()
+    }).populate('leadId', 'leadName companyName leadId').sort({ nextFollowUpDate: 1 }).limit(50).lean(),
+    FollowUp.find({
+      isDeleted: false, status: 'PENDING', target: 'PAYMENT',
+      ...(normalizeRole(req.user.role) === 'BDA' ? { assignedSalesPerson: req.user._id } : {})
+    }).populate('clientId', 'clientName clientId assignedTo').populate('projectId', 'projectId projectName outstanding nextPaymentDueDate')
+      .sort({ nextFollowUpDate: 1 }).limit(50).lean(),
+    CrmProject.find({
+      isDeleted: false, outstanding: { $gt: 0 }, nextPaymentDueDate: { $lte: end }
+    }).populate({
+      path: 'clientId',
+      select: 'clientId clientName assignedTo',
+      match: assignedClientFilter
+    }).select('projectId projectName outstanding nextPaymentDueDate currency clientId').limit(50).lean()
   ]);
   const statusMap = Object.fromEntries(byStatus.map((row) => [row._id, row.count]));
   const won = (statusMap.WON || 0) + (statusMap.CONVERTED || 0);
@@ -128,7 +213,9 @@ router.get('/dashboard', authorize('crm:leads:read'), asyncHandler(async (req, r
     todayFollowUps,
     overdueFollowUps,
     todayFollowUpCount: todayFollowUps.length,
-    overdueFollowUpCount: overdueFollowUps.length
+    overdueFollowUpCount: overdueFollowUps.length,
+    paymentFollowUps,
+    duePayments: dueProjects.filter((project) => project.clientId)
   }, 'Lead dashboard fetched');
 }));
 
@@ -146,16 +233,19 @@ router.get('/board', authorize('crm:leads:read'), asyncHandler(async (req, res) 
   }
   const leads = await CrmLead.find(filter)
     .populate('assignedTo', 'name email')
+    .populate('clientId', 'clientId clientName companyName')
     .sort({ updatedAt: -1 })
     .limit(500)
     .lean();
+  const enriched = await enrichLeads(leads);
   const columns = Object.fromEntries(SALES_PIPELINE_STATUSES.map((status) => [status, []]));
-  for (const lead of leads) {
+  for (const lead of enriched) {
     const column = normalizeLeadStatus(lead.status);
     if (!columns[column]) columns[column] = [];
     columns[column].push(lead);
   }
-  return sendSuccess(res, { columns, stages: SALES_PIPELINE_STATUSES }, 'Lead board fetched');
+  const overdueAlerts = enriched.filter((lead) => lead.overdueAlert);
+  return sendSuccess(res, { columns, stages: SALES_PIPELINE_STATUSES, overdueAlerts }, 'Lead board fetched');
 }));
 
 router.get('/export', authorize('crm:leads:read'), asyncHandler(async (req, res) => {
@@ -196,6 +286,13 @@ router.get('/', authorize('crm:leads:read'), asyncHandler(async (req, res) => {
   if (LEAD_STATUSES.includes(req.query.status)) filter.status = req.query.status;
   if (LEAD_SOURCES.includes(req.query.source)) filter.source = req.query.source;
   if (req.query.assignedTo) filter.assignedTo = req.query.assignedTo;
+  if (req.query.converted === 'true') filter.clientId = { $nin: [null] };
+  if (req.query.converted === 'false') {
+    filter.$and = [...(filter.$and || []), { $or: [{ clientId: null }, { clientId: { $exists: false } }] }];
+  }
+  if (req.query.convertible === 'true') {
+    filter.status = { $in: CONVERTIBLE_LEAD_STATUSES };
+  }
   if (req.query.q) {
     const q = escapeRegex(String(req.query.q).trim());
     filter.$or = [
@@ -206,19 +303,21 @@ router.get('/', authorize('crm:leads:read'), asyncHandler(async (req, res) => {
       { leadId: { $regex: q, $options: 'i' } }
     ];
   }
+  const sortable = {
+    createdAt: 'createdAt', updatedAt: 'updatedAt', leadName: 'leadName', status: 'status',
+    priority: 'priority', quotedAmount: 'quotedAmount', expectedDealValue: 'expectedDealValue'
+  };
+  const sortBy = sortable[req.query.sortBy] || 'updatedAt';
+  const sortDir = req.query.order === 'asc' ? 1 : -1;
   const [data, total] = await Promise.all([
     CrmLead.find(filter)
       .populate('assignedTo', 'name email role')
       .populate('clientId', 'clientId clientName companyName')
-      .sort({ updatedAt: -1 }).skip(skip).limit(limit).lean(),
+      .sort({ [sortBy]: sortDir }).skip(skip).limit(limit).lean(),
     CrmLead.countDocuments(filter)
   ]);
-  const sanitized = isSuperAdmin(req.user) ? data : data.map((lead) => {
-    const copy = { ...lead };
-    delete copy.estimatedBudget;
-    return copy;
-  });
-  return sendSuccess(res, sanitized, 'Leads fetched', pagination(page, limit, total));
+  const enriched = await enrichLeads(data);
+  return sendSuccess(res, enriched.map((lead) => presentLead(lead, req.user)), 'Leads fetched', pagination(page, limit, total));
 }));
 
 router.get('/follow-ups/list/all', authorize('crm:leads:read'), asyncHandler(async (req, res) => {
@@ -265,21 +364,29 @@ router.get('/:id', authorize('crm:leads:read'), asyncHandler(async (req, res) =>
   const lead = await CrmLead.findOne({ _id: req.params.id, isDeleted: false, ...leadScopeFilter(req.user) })
     .populate('assignedTo', 'name email role')
     .populate('assignedBy', 'name email')
+    .populate('convertedBy', 'name email')
     .populate('clientId', 'clientId clientName companyName')
     .lean();
   if (!lead) throw new AppError('Lead not found', 404);
-  if (!isSuperAdmin(req.user)) delete lead.estimatedBudget;
   const [activities, followUps] = await Promise.all([
     LeadActivity.find({ leadId: lead._id }).sort({ occurredAt: -1 }).limit(100)
       .populate('actor', 'name email').lean(),
     FollowUp.find({ leadId: lead._id, isDeleted: false }).sort({ nextFollowUpDate: -1 })
       .populate('assignedSalesPerson', 'name email').lean()
   ]);
-  return sendSuccess(res, { ...lead, activities, followUps }, 'Lead details fetched');
+  const [enriched] = await enrichLeads([lead]);
+  return sendSuccess(res, { ...presentLead(enriched, req.user), activities, followUps }, 'Lead details fetched');
 }));
 
 router.post('/', authorize('crm:leads:write'), validate(leadBody), asyncHandler(async (req, res) => {
-  const { forceCreate, ...payload } = req.body;
+  const { forceCreate, nextFollowUpDate, nextFollowUpTime, followUpType, followUpNote, ...raw } = req.body;
+  const payload = applyQuotedAmount(raw);
+  if (payload.businessRequirements && !payload.requirementDescription) {
+    payload.requirementDescription = payload.businessRequirements;
+  }
+  if (payload.requirementDescription && !payload.businessRequirements) {
+    payload.businessRequirements = payload.requirementDescription;
+  }
   const duplicates = await findLeadDuplicates({ email: payload.email, phone: payload.phone });
   if (duplicates.length && !forceCreate) {
     throw new AppError('Possible duplicate lead detected', 409, { duplicates });
@@ -296,6 +403,25 @@ router.post('/', authorize('crm:leads:write'), validate(leadBody), asyncHandler(
     updatedBy: req.user._id
   });
   await addLeadActivity(lead._id, 'LEAD_CREATED', 'Lead created', req.user._id, `${lead.leadName} was created`);
+  if (nextFollowUpDate) {
+    const timezone = payload.timezone || 'Asia/Kolkata';
+    await FollowUp.create({
+      leadId: lead._id,
+      target: 'LEAD',
+      nextFollowUpDate,
+      nextFollowUpTime: nextFollowUpTime || '',
+      followUpType: followUpType || 'CALL',
+      followUpNote: followUpNote || '',
+      timezone,
+      reminderPreference: '30_MINUTES_BEFORE',
+      reminderDateTime: computeReminderDateTime({
+        nextFollowUpDate, nextFollowUpTime, timezone, reminderPreference: '30_MINUTES_BEFORE'
+      }),
+      assignedSalesPerson: assignedTo,
+      createdBy: req.user._id
+    });
+    await addLeadActivity(lead._id, 'FOLLOW_UP_SCHEDULED', 'Follow-up scheduled', req.user._id);
+  }
   if (assignedTo) {
     await addLeadActivity(lead._id, 'LEAD_ASSIGNED', 'Lead assigned', req.user._id);
     await notifyUser({
@@ -362,7 +488,9 @@ router.patch('/:id', authorize('crm:leads:write'), validate(leadBody.fork(Object
     throw new AppError('Won/converted leads cannot change to a non-won status', 400);
   }
   const previousStatus = lead.status;
-  Object.assign(lead, req.body, { updatedBy: req.user._id });
+  const { forceCreate, nextFollowUpDate, nextFollowUpTime, followUpType, followUpNote, ...raw } = req.body;
+  Object.assign(lead, applyQuotedAmount(raw), { updatedBy: req.user._id });
+  if (lead.businessRequirements && !lead.requirementDescription) lead.requirementDescription = lead.businessRequirements;
   await lead.save();
   if (req.body.status && req.body.status !== previousStatus) {
     await addLeadActivity(lead._id, 'STATUS_CHANGED', 'Status changed', req.user._id,
@@ -456,78 +584,68 @@ router.post('/:id/follow-ups', authorize('crm:leads:write'), validate(followUpBo
 router.post('/:id/convert', authorize('crm:leads:convert'), validate(Joi.object({
   conversionNotes: Joi.string().trim().max(2000).allow(''),
   clientName: Joi.string().trim().max(160).allow(''),
-  companyName: Joi.string().trim().max(160).allow('')
+  companyName: Joi.string().trim().max(160).allow(''),
+  projectName: Joi.string().trim().max(200).allow(''),
+  contractValue: Joi.number().min(0).allow(null),
+  currency: Joi.string().trim().uppercase().valid(...CURRENCIES),
+  paymentTerms: Joi.string().trim().max(1000).allow(''),
+  startDate: Joi.date().iso().allow(null),
+  endDate: Joi.date().iso().allow(null),
+  duration: Joi.string().trim().max(80).allow(''),
+  nextPaymentDueDate: Joi.date().iso().allow(null),
+  assignedTo: objectId,
+  createProject: Joi.boolean(),
+  forceConvert: Joi.boolean()
 })), asyncHandler(async (req, res) => {
-  const lead = await CrmLead.findOne({ _id: req.params.id, isDeleted: false });
+  try {
+    const result = await convertLeadToClient(req.params.id, req.user, req.body);
+    await writeCrmAudit(req, 'LEAD_CONVERTED', 'CrmLead', result.lead._id, { clientId: result.client._id });
+    return sendSuccess(res, result, 'Lead converted to client');
+  } catch (error) {
+    if (error?.code === 11000) throw new AppError('Lead is already converted', 400);
+    throw error;
+  }
+}));
+
+router.post('/:id/calls', authorize('crm:leads:write'), validate(Joi.object({
+  title: Joi.string().trim().max(200).allow(''),
+  notes: Joi.string().trim().min(1).max(4000).required(),
+  result: Joi.string().trim().max(500).allow(''),
+  occurredAt: Joi.date().iso().allow(null),
+  durationMinutes: Joi.number().min(0).allow(null)
+})), asyncHandler(async (req, res) => {
+  const lead = await CrmLead.findOne({ _id: req.params.id, isDeleted: false, ...leadScopeFilter(req.user) });
   if (!lead) throw new AppError('Lead not found', 404);
-  if (isWonStatus(lead.status) && lead.clientId) {
-    throw new AppError('Lead is already converted', 400);
-  }
-  const clientCode = await nextCrmId('crm_client', 'CLT');
-  const client = await CrmClient.create({
-    clientId: clientCode,
-    clientName: req.body.clientName || lead.leadName || lead.companyName,
-    companyName: req.body.companyName || lead.companyName,
-    industry: lead.industry,
-    companyWebsite: lead.companyWebsite,
-    companyEmail: lead.email,
-    companyPhone: lead.phone,
-    country: lead.country,
-    state: lead.state,
-    city: lead.city,
-    address: lead.address,
-    postalCode: lead.postalCode,
-    companySize: lead.companySize,
-    timezone: lead.timezone,
-    sourceLeadId: lead._id,
-    assignedTo: lead.assignedTo,
-    createdBy: req.user._id,
-    updatedBy: req.user._id
-  });
-  if (lead.contactPersonName || lead.email || lead.phone) {
-    await ClientContact.create({
-      clientId: client._id,
-      contactName: lead.contactPersonName || lead.leadName,
-      designation: lead.designation,
-      email: lead.email,
-      phone: lead.phone,
-      whatsapp: lead.whatsappNumber,
-      linkedIn: lead.linkedInProfile,
-      isPrimary: true,
-      isDecisionMaker: Boolean(lead.isDecisionMaker),
-      createdBy: req.user._id
-    });
-  }
-  lead.status = 'WON';
-  lead.convertedDate = new Date();
-  lead.convertedBy = req.user._id;
-  lead.clientId = client._id;
-  lead.conversionNotes = req.body.conversionNotes || '';
-  lead.updatedBy = req.user._id;
+  lead.lastContactAt = req.body.occurredAt || new Date();
   await lead.save();
-  await addLeadActivity(lead._id, 'LEAD_CONVERTED', 'Lead converted to client', req.user._id,
-    req.body.conversionNotes || '', '', { clientId: client._id, clientCode });
-  await ClientActivity.create({
-    clientId: client._id,
-    type: 'CLIENT_CREATED',
-    title: 'Client created from lead',
-    description: `Converted from lead ${lead.leadId}`,
-    actor: req.user._id,
-    metadata: { leadId: lead._id }
-  });
-  await notifyUser({
-    recipient: lead.assignedTo,
-    type: 'LEAD_CONVERTED',
-    title: 'Lead converted',
-    message: `${lead.leadName} was converted to client ${client.clientId}.`,
-    entityType: 'CrmClient',
-    entityId: client._id,
-    link: `/crm/clients/${client._id}`,
-    actor: req.user._id,
-    dedupeKey: `lead-converted:${lead._id}`
-  });
-  await writeCrmAudit(req, 'LEAD_CONVERTED', 'CrmLead', lead._id, { clientId: client._id });
-  return sendSuccess(res, { lead, client }, 'Lead converted to client');
+  const activity = await addLeadActivity(
+    lead._id, 'CALL_LOG', req.body.title || 'Call logged', req.user._id,
+    req.body.notes, req.body.result || '', { durationMinutes: req.body.durationMinutes || null }
+  );
+  if (req.body.occurredAt) {
+    activity.occurredAt = req.body.occurredAt;
+    await activity.save();
+  }
+  return sendSuccess(res, activity, 'Call logged');
+}));
+
+router.post('/:id/attachments', authorize('crm:leads:write'), crmUpload.array('files', 10), asyncHandler(async (req, res) => {
+  const lead = await CrmLead.findOne({ _id: req.params.id, isDeleted: false, ...leadScopeFilter(req.user) });
+  if (!lead) throw new AppError('Lead not found', 404);
+  const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
+  if (!files.length) throw new AppError('A file is required', 422);
+  const stored = [];
+  for (const file of files) {
+    const meta = await storeCrmFile(file, 'CrmLead', lead._id);
+    meta.documentType = req.body.documentType || 'PROPOSAL';
+    meta.uploadedBy = req.user._id;
+    lead.attachments.push(meta);
+    stored.push(meta);
+  }
+  await lead.save();
+  await addLeadActivity(lead._id, 'ATTACHMENT_ADDED', 'Attachment uploaded', req.user._id, stored.map((item) => item.name).join(', '));
+  await writeCrmAudit(req, 'LEAD_ATTACHMENT', 'CrmLead', lead._id, { count: stored.length });
+  return sendSuccess(res, lead.attachments, 'Attachments uploaded');
 }));
 
 router.post('/:id/archive', authorize('crm:leads:write'), asyncHandler(async (req, res) => {
